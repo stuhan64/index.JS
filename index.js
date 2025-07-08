@@ -1,72 +1,111 @@
-// index.js — Express backend for AstroApp + Printful
 
 const express = require('express');
 const axios = require('axios');
-const FormData = require('form-data');
-const fs = require('fs');
-const path = require('path');
-
 const app = express();
-const port = process.env.PORT || 3000;
-
 app.use(express.json());
 
-// === CONFIG ===
-const ASTROAPP_API_KEY = process.env.ASTROAPP_API_KEY || 'p4Y5dCexJEb7Uzeg';
-const PRINTFUL_API_KEY = process.env.PRINTFUL_API_KEY || 'mPfVWqduOUCtQfPstyyaG2hsOuKhjqKSzh7NiYt8';
+const PORT = process.env.PORT || 3000;
 
-// === 1. Receive birth data from front-end ===
-app.post('/generate-chart', async (req, res) => {
-  const { name, birthDate, birthTime, birthLocation } = req.body;
+// === CONFIGURATION ===
+const ASTROAPP_KEY = process.env.ASTROAPP_KEY;
+const ASTROAPP_USER = process.env.ASTROAPP_USER;
+const ASTROAPP_PASS = process.env.ASTROAPP_PASS;
+
+const OPENCAGE_KEY = process.env.OPENCAGE_KEY;
+const TIMEZONEDB_KEY = process.env.TIMEZONEDB_KEY;
+
+// === HELPER FUNCTIONS ===
+function encodeBasicAuth(user, pass) {
+  return 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
+}
+
+async function getAstroToken() {
+  try {
+    const response = await axios.post(
+      'https://astroapp.com/astro/apis/chart',
+      {},
+      {
+        headers: {
+          'Authorization': encodeBasicAuth(ASTROAPP_USER, ASTROAPP_PASS),
+          'Content-Type': 'application/json',
+          'Key': ASTROAPP_KEY
+        }
+      }
+    );
+    return response.data.token;
+  } catch (err) {
+    console.error("AstroApp token error:", err.response?.data || err.message);
+    return null;
+  }
+}
+
+async function geocodeLocation(location) {
+  const geoURL = \`https://api.opencagedata.com/geocode/v1/json?q=\${encodeURIComponent(location)}&key=\${OPENCAGE_KEY}\`;
+  const res = await axios.get(geoURL);
+  const { lat, lng } = res.data.results[0].geometry;
+  return { lat, lng };
+}
+
+async function getTimeZone(lat, lng) {
+  const tzURL = \`https://api.timezonedb.com/v2.1/get-time-zone?key=\${TIMEZONEDB_KEY}&format=json&by=position&lat=\${lat}&lng=\${lng}\`;
+  const res = await axios.get(tzURL);
+  return res.data.zoneName;
+}
+
+// === MAIN API ROUTE ===
+app.post('/', async (req, res) => {
+  const { birthDate, birthTime, birthLocation } = req.body;
+  const dateTime = \`\${birthDate}T\${birthTime}:00\`;
 
   try {
-    // === 2. Call AstroApp API ===
-    const astroRes = await axios.post('https://api.astroapp.com/api/v1/chart/natal', {
-      apiKey: ASTROAPP_API_KEY,
-      name,
-      birthDate,
-      birthTime,
-      birthLocation,
-      chartFormat: 'png'
-    });
+    const { lat, lng } = await geocodeLocation(birthLocation);
+    const tz = await getTimeZone(lat, lng);
+    const jwt = await getAstroToken();
 
-    const chartImageUrl = astroRes.data.chartImageUrl;
+    if (!jwt) throw new Error("Missing AstroApp token");
 
-    // === 3. Download chart image ===
-    const imgRes = await axios.get(chartImageUrl, { responseType: 'stream' });
-    const imagePath = path.join(__dirname, 'chart.png');
-    const writer = fs.createWriteStream(imagePath);
-    imgRes.data.pipe(writer);
-
-    writer.on('finish', async () => {
-      // === 4. Upload to Printful ===
-      const form = new FormData();
-      form.append('file', fs.createReadStream(imagePath));
-
-      const uploadRes = await axios.post('https://api.printful.com/files', form, {
-        headers: {
-          Authorization: `Bearer ${PRINTFUL_API_KEY}`,
-          ...form.getHeaders(),
+    const astroResponse = await axios.post(
+      'https://astroapp.com/astro/apis/chart',
+      {
+        chart: {
+          chartData: {
+            chartName: "Customer Chart",
+            chartDate: dateTime,
+            elevation: 0,
+            lat,
+            lng,
+            tz,
+            zodiacID: 100,
+            houseSystemID: 1,
+            coordSys: "G",
+            version: 1
+          }
         },
-      });
+        calcRequestProps: {
+          needImage: "Y",
+          needAspects: "N"
+        },
+        params: {
+          objects: [0, 1, 24] // Sun, Moon, Asc
+        }
+      },
+      {
+        headers: {
+          'Authorization': \`Bearer \${jwt}\`,
+          'Content-Type': 'application/json',
+          'Key': ASTROAPP_KEY
+        }
+      }
+    );
 
-      const printfulFileUrl = uploadRes.data.result.url;
-
-      // === 5. Respond to front-end ===
-      res.json({ success: true, imageUrl: printfulFileUrl });
-    });
-
-    writer.on('error', () => {
-      throw new Error('Failed to write image stream to file');
-    });
-
+    const imageUrl = astroResponse.data?.chartImageUrl || 'No image URL returned';
+    res.json({ success: true, imageUrl });
   } catch (err) {
-    console.error('Error generating chart or uploading to Printful:', err);
-    res.status(500).json({ error: 'Chart generation failed.' });
+    console.error(err.message);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.listen(port, () => {
-  console.log(`AstroApp backend running on port ${port}`);
+app.listen(PORT, () => {
+  console.log('Server running on port', PORT);
 });
-
