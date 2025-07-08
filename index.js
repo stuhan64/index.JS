@@ -18,32 +18,34 @@ const TIMEZONEDB_KEY = process.env.TIMEZONEDB_KEY;
 function encodeBasicAuth(user, pass) {
   return 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
 }
+async function fetchAstroChart(chartPayload) {
+  const credentials = Buffer.from(`${ASTROAPP_EMAIL}:${ASTROAPP_PASS}`).toString('base64');
 
-async function getAstroAppToken() {
   try {
-    const credentials = Buffer.from(`${ASTROAPP_EMAIL}:${ASTROAPP_PASS}`).toString('base64');
-
-    console.log("🔐 Attempting AstroApp token request...");
-    console.log("👉 Email:", ASTROAPP_EMAIL);
-    console.log("👉 API Key:", ASTROAPP_KEY);
-    // ❗ Don't log password in production, just for debug
-    console.log("👉 Encoded:", credentials);
-
-    const response = await axios.post('https://astroapp.com/astro/apis/authenticate', {}, {
+    const response = await axios.post('https://astroapp.com/astro/apis/chart', chartPayload, {
       headers: {
         'Content-Type': 'application/json',
-        'Key': ASTROAPP_KEY,
-        'Authorization': `Basic ${credentials}`
+        'Authorization': `Basic ${credentials}`,
+        'Key': ASTROAPP_KEY
       }
     });
 
-    console.log("✅ Token response:", response.data);
-    return response.data.token;
+    const token = response.data.token;
+
+    if (!token) {
+      throw new Error('Token missing from chart response');
+    }
+
+    console.log("✅ AstroApp token received:", token);
+    // Use token for future requests, or save it in memory if needed
+
+    return response.data; // or just return the chart/image info
   } catch (err) {
-    console.error("❌ AstroApp token fetch failed:", err.response?.data || err.message);
-    return null;
+    console.error("❌ Chart request failed:", err.response?.data || err.message);
+    throw err;
   }
 }
+
 
 
 async function geocodeLocation(location) {
