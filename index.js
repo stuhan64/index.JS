@@ -40,16 +40,12 @@ async function getAstroToken() {
 }
 
 async function geocodeLocation(location) {
-  const geoURL = \`https://api.opencagedata.com/geocode/v1/json?q=\${encodeURIComponent(location)}&key=\${OPENCAGE_KEY}\`;
-  const res = await axios.get(geoURL);
-  const { lat, lng } = res.data.results[0].geometry;
-  return { lat, lng };
+const geoURL = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(location)}&key=${OPENCAGE_KEY}`;
 }
 
 async function getTimeZone(lat, lng) {
-  const tzURL = \`https://api.timezonedb.com/v2.1/get-time-zone?key=\${TIMEZONEDB_KEY}&format=json&by=position&lat=\${lat}&lng=\${lng}\`;
-  const res = await axios.get(tzURL);
-  return res.data.zoneName;
+  const tzURL = `https://api.timezonedb.com/v2.1/get-time-zone?key=${TIMEZONEDB_KEY}&format=json&by=position&lat=${lat}&lng=${lng}`;
+
 }
 
 // === MAIN API ROUTE ===
