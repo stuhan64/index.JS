@@ -40,18 +40,22 @@ async function getAstroToken() {
 }
 
 async function geocodeLocation(location) {
-const geoURL = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(location)}&key=${OPENCAGE_KEY}`;
+  const geoURL = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(location)}&key=${OPENCAGE_KEY}`;
+  const res = await axios.get(geoURL);
+  const { lat, lng } = res.data.results[0].geometry;
+  return { lat, lng };
 }
 
 async function getTimeZone(lat, lng) {
   const tzURL = `https://api.timezonedb.com/v2.1/get-time-zone?key=${TIMEZONEDB_KEY}&format=json&by=position&lat=${lat}&lng=${lng}`;
-
+  const res = await axios.get(tzURL);
+  return res.data.zoneName;
 }
 
 // === MAIN API ROUTE ===
 app.post('/', async (req, res) => {
   const { birthDate, birthTime, birthLocation } = req.body;
-  const dateTime = \`\${birthDate}T\${birthTime}:00\`;
+  const dateTime = `${birthDate}T${birthTime}:00`;
 
   try {
     const { lat, lng } = await geocodeLocation(birthLocation);
@@ -87,7 +91,7 @@ app.post('/', async (req, res) => {
       },
       {
         headers: {
-          'Authorization': \`Bearer \${jwt}\`,
+          'Authorization': `Bearer ${jwt}`,
           'Content-Type': 'application/json',
           'Key': ASTROAPP_KEY
         }
