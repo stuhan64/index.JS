@@ -69,10 +69,6 @@ app.post('/', async (req, res) => {
   try {
     const { lat, lng } = await geocodeLocation(birthLocation);
     const tz = await getTimeZone(lat, lng);
-    const jwt = await getAstroAppToken();
-
-    if (!jwt) throw new Error("Missing AstroApp token");
-
     const astroResponse = await axios.post(
       'https://astroapp.com/astro/apis/chart',
       {
