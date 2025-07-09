@@ -8,18 +8,12 @@
   },
   "dependencies": {
     "axios": "^1.6.8",
-<<<<<<< HEAD
-=======
     "cors": "^2.8.5",
->>>>>>> 9c6c2b3 (Update index.js and dependencies)
     "express": "^4.18.2"
   },
   "engines": {
     "node": ">=16.0.0"
   },
   "license": "MIT"
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 9c6c2b3 (Update index.js and dependencies)
+
