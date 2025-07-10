@@ -17,7 +17,6 @@ const ASTROAPP_PASS = process.env.ASTROAPP_PASS;
 const ASTROAPP_KEY = process.env.ASTROAPP_KEY;
 const OPENCAGE_KEY = process.env.OPENCAGE_KEY;
 
-// === Endpoint to receive birth data from Shopify ===
 app.post('/', async (req, res) => {
   const { birthDate, birthTime, birthLocation } = req.body;
 
@@ -32,7 +31,7 @@ app.post('/', async (req, res) => {
     // Step 2: Combine date and time
     const birthDateTime = `${birthDate}T${birthTime}:00`;
 
-    // Step 3: Build chart request payload
+    // Step 3: Build chart creation payload
     const chartPayload = {
       chart: {
         chartData: {
@@ -59,7 +58,7 @@ app.post('/', async (req, res) => {
 
     const credentials = Buffer.from(`${ASTROAPP_EMAIL}:${ASTROAPP_PASS}`).toString('base64');
 
-    // Step 4: Call AstroApp API
+    // Step 4: Create chart and get chartID
     const chartResponse = await axios.post('https://astroapp.com/astro/apis/chart', chartPayload, {
       headers: {
         'Content-Type': 'application/json',
@@ -68,13 +67,28 @@ app.post('/', async (req, res) => {
       }
     });
 
-    // Step 5: Parse chart image URL (with fallback)
-    let imageUrl = chartResponse.data.imageUrl;
-    if (!imageUrl) {
-      imageUrl = 'https://placehold.co/400x400?text=Chart+Created';
-    }
+    const chartID = chartResponse.data.chartID;
+
+    // Step 5: Request image using chartID
+    const imagePayload = {
+      chartID,
+      imageWidth: 1200,
+      imageHeight: 1200,
+      imageType: "png"
+    };
+
+    const imageResponse = await axios.post('https://astroapp.com/astro/apis/chart/image', imagePayload, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${credentials}`,
+        'Key': ASTROAPP_KEY
+      }
+    });
+
+    const imageUrl = imageResponse.data.imageUrl || 'https://placehold.co/400x400?text=Chart+Unavailable';
 
     res.json({ success: true, imageUrl });
+
   } catch (err) {
     console.error("❌ Error creating chart:", err.response?.data || err.message);
     res.status(400).json({ success: false, error: err.message });
@@ -82,5 +96,5 @@ app.post('/', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
