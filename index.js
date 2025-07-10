@@ -59,14 +59,19 @@ app.post('/', async (req, res) => {
 
     const credentials = Buffer.from(`${ASTROAPP_EMAIL}:${ASTROAPP_PASS}`).toString('base64');
 
-    // Step 4: Call AstroApp API
-    const chartResponse = await axios.post('https://astroapp.com/astro/apis/chart', chartPayload, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Basic ${credentials}`,
-        'Key': ASTROAPP_KEY
-      }
-    });
+// Step 4: Call AstroApp API
+const chartResponse = await axios.post('https://astroapp.com/astro/apis/chart', chartPayload, {
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Basic ${credentials}`,
+    'Key': ASTROAPP_KEY
+  }
+});
+// Log full response for inspection
+console.log("📦 AstroApp response:", chartResponse.data);
+
+// Corrected path to real chart image
+const imageUrl = chartResponse.data.chartResult?.imageUrl || 'https://placehold.co/400x400?text=Chart+Created';
 
     // Step 5: Parse chart image URL (fake placeholder unless image gen is enabled)
     const imageUrl = chartResponse.data.imageUrl || 'https://placehold.co/400x400?text=Chart+Created';
