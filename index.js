@@ -17,6 +17,7 @@ const ASTROAPP_PASS = process.env.ASTROAPP_PASS;
 const ASTROAPP_KEY = process.env.ASTROAPP_KEY;
 const OPENCAGE_KEY = process.env.OPENCAGE_KEY;
 
+// === Endpoint to receive birth data from Shopify ===
 app.post('/', async (req, res) => {
   const { birthDate, birthTime, birthLocation } = req.body;
 
@@ -24,6 +25,11 @@ app.post('/', async (req, res) => {
     // Step 1: Geocode location
     const geoURL = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(birthLocation)}&key=${OPENCAGE_KEY}`;
     const geoResponse = await axios.get(geoURL);
+
+    if (!geoResponse.data.results || geoResponse.data.results.length === 0) {
+      throw new Error('Location not found');
+    }
+
     const geo = geoResponse.data.results[0].geometry;
     const lat = geo.lat;
     const lng = geo.lng;
@@ -31,7 +37,7 @@ app.post('/', async (req, res) => {
     // Step 2: Combine date and time
     const birthDateTime = `${birthDate}T${birthTime}:00`;
 
-    // Step 3: Build chart creation payload
+    // Step 3: Build chart request payload
     const chartPayload = {
       chart: {
         chartData: {
@@ -49,7 +55,8 @@ app.post('/', async (req, res) => {
       },
       calcRequestProps: {
         needImage: "Y",
-        needAspects: "N"
+        needAspects: "N",
+        needHousePlacements: "Y"
       },
       params: {
         objects: [0, 1, 24] // Sun, Moon, ASC
@@ -58,7 +65,7 @@ app.post('/', async (req, res) => {
 
     const credentials = Buffer.from(`${ASTROAPP_EMAIL}:${ASTROAPP_PASS}`).toString('base64');
 
-    // Step 4: Create chart and get chartID
+    // Step 4: Call AstroApp API
     const chartResponse = await axios.post('https://astroapp.com/astro/apis/chart', chartPayload, {
       headers: {
         'Content-Type': 'application/json',
@@ -67,36 +74,15 @@ app.post('/', async (req, res) => {
       }
     });
 
-    const chartID = chartResponse.data.chartID;
-
-    // Step 5: Request image using chartID
-    const imagePayload = {
-      chartID,
-      imageWidth: 1200,
-      imageHeight: 1200,
-      imageType: "png"
-    };
-
-    const imageResponse = await axios.post('https://astroapp.com/astro/apis/chart/image', imagePayload, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Basic ${credentials}`,
-        'Key': ASTROAPP_KEY
-      }
-    });
-
-// Step 5: Parse chart image URL from AstroApp response
-const imageUrl = chartResponse.data.chartData?.imgPath || 'https://placehold.co/400x400?text=No+Chart+Image';
-
+    const astroData = chartResponse.data;
+    const imageUrl = astroData.chartData?.imgPath || 'https://placehold.co/400x400?text=Chart+Created';
 
     res.json({ success: true, imageUrl });
-
   } catch (err) {
     console.error("❌ Error creating chart:", err.response?.data || err.message);
-    res.status(400).json({ success: false, error: err.message });
+    res.status(400).json({ success: false, error: err.response?.data || err.message });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-});
+  console.log(`Server running on port ${PO
