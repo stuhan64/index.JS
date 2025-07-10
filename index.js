@@ -85,7 +85,9 @@ app.post('/', async (req, res) => {
       }
     });
 
-    const imageUrl = imageResponse.data.imageUrl || 'https://placehold.co/400x400?text=Chart+Unavailable';
+// Step 5: Parse chart image URL from AstroApp response
+const imageUrl = chartResponse.data.chartData?.imgPath || 'https://placehold.co/400x400?text=No+Chart+Image';
+
 
     res.json({ success: true, imageUrl });
 
