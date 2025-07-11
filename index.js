@@ -76,11 +76,18 @@ app.post('/', async (req, res) => {
       }
     });
 
-    // Step 5: Extract image URL
+    // Step 5: Log and extract image URL
+    console.log("📦 AstroApp response:", JSON.stringify(chartResponse.data, null, 2));
+
     const imageUrl = chartResponse.data?.chartData?.imgPath;
-    if (!imageUrl) throw new Error("No chart image returned from AstroApp");
+
+    if (!imageUrl) {
+      console.error("⚠️ No image URL returned from AstroApp response:", chartResponse.data);
+      throw new Error("No chart image returned from AstroApp");
+    }
 
     res.json({ success: true, imageUrl });
+
   } catch (err) {
     console.error("❌ Error creating chart:", err.response?.data || err.message);
     res.status(400).json({ success: false, error: err.message });
@@ -90,3 +97,4 @@ app.post('/', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
+
