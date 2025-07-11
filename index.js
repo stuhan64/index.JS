@@ -1,4 +1,4 @@
-// index.js - AstroApp + Shopify Backend Integration
+// index.js - AstroApp + Shopify Backend Integration (Improved with logging, time zone, etc.)
 
 const express = require('express');
 const axios = require('axios');
@@ -22,20 +22,22 @@ app.post('/', async (req, res) => {
   const { birthDate, birthTime, birthLocation } = req.body;
 
   try {
+    console.log("📥 Incoming request:", { birthDate, birthTime, birthLocation });
+
     // Step 1: Geocode location
     const geoURL = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(birthLocation)}&key=${OPENCAGE_KEY}`;
     const geoResponse = await axios.get(geoURL);
+    const geoData = geoResponse.data.results[0];
 
-    if (!geoResponse.data.results || geoResponse.data.results.length === 0) {
-      throw new Error('Location not found');
-    }
+    const lat = geoData.geometry.lat;
+    const lng = geoData.geometry.lng;
+    const timezone = geoData.annotations?.timezone?.name || "UTC";
 
-    const geo = geoResponse.data.results[0].geometry;
-    const lat = geo.lat;
-    const lng = geo.lng;
+    console.log("📍 Geolocation:", { lat, lng, timezone });
 
-    // Step 2: Combine date and time
+    // Step 2: Combine date and time (assumes user sent proper ISO-like strings)
     const birthDateTime = `${birthDate}T${birthTime}:00`;
+    console.log("🕒 Birth DateTime:", birthDateTime);
 
     // Step 3: Build chart request payload
     const chartPayload = {
@@ -46,7 +48,7 @@ app.post('/', async (req, res) => {
           lat,
           lng,
           elev: 1,
-          tz: "UTC",
+          tz: timezone,
           zodiacID: 100,
           houseSystemID: 1,
           coordSys: "G",
@@ -74,16 +76,17 @@ app.post('/', async (req, res) => {
       }
     });
 
-    const astroData = chartResponse.data;
-    const imageUrl = astroData.chartData?.imgPath || 'https://placehold.co/400x400?text=Chart+Created';
+    // Step 5: Extract image URL
+    const imageUrl = chartResponse.data?.chartData?.imgPath;
+    if (!imageUrl) throw new Error("No chart image returned from AstroApp");
 
     res.json({ success: true, imageUrl });
   } catch (err) {
     console.error("❌ Error creating chart:", err.response?.data || err.message);
-    res.status(400).json({ success: false, error: err.response?.data || err.message });
+    res.status(400).json({ success: false, error: err.message });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
