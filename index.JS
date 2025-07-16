@@ -98,11 +98,11 @@ app.post('/', async (req, res) => {
     );
 
     const imageUrl = astroResponse.data?.chartImageUrl || 'No image URL returned';
-    const points = astroResponse.data?.chartPoints;
+    const points = astroResponse.data?.chartPoints || [];
 
-    const sunSign = points?.find(p => p.pointID === 0)?.signName || 'unknown';
-    const moonSign = points?.find(p => p.pointID === 1)?.signName || 'unknown';
-    const risingSign = points?.find(p => p.pointID === 24)?.signName || 'unknown';
+    const sunSign = points.find(p => p.pointID === 0)?.signName?.toLowerCase() || 'unknown';
+    const moonSign = points.find(p => p.pointID === 1)?.signName?.toLowerCase() || 'unknown';
+    const risingSign = points.find(p => p.pointID === 24)?.signName?.toLowerCase() || 'unknown';
 
     res.json({
       success: true,
