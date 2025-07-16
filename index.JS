@@ -1,6 +1,9 @@
 const express = require('express');
 const axios = require('axios');
+const cors = require('cors');
 const app = express();
+
+app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
@@ -98,11 +101,11 @@ app.post('/', async (req, res) => {
     );
 
     const imageUrl = astroResponse.data?.chartImageUrl || 'No image URL returned';
-    const points = astroResponse.data?.chartPoints || [];
+    const points = astroResponse.data?.chartPoints;
 
-    const sunSign = points.find(p => p.pointID === 0)?.signName?.toLowerCase() || 'unknown';
-    const moonSign = points.find(p => p.pointID === 1)?.signName?.toLowerCase() || 'unknown';
-    const risingSign = points.find(p => p.pointID === 24)?.signName?.toLowerCase() || 'unknown';
+    const sunSign = points?.find(p => p.pointID === 0)?.signName || 'unknown';
+    const moonSign = points?.find(p => p.pointID === 1)?.signName || 'unknown';
+    const risingSign = points?.find(p => p.pointID === 24)?.signName || 'unknown';
 
     res.json({
       success: true,
