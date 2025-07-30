@@ -78,11 +78,11 @@ app.post('/', async (req, res) => {
     );
 
     const imageUrl = astroResponse.data?.chartImageUrl || '';
-    const points = astroResponse.data?.chartPoints;
+    const points = astroResponse.data?.chartPoints || [];
 
-    const sunSign = points?.find(p => p.pointID === 0)?.signName || 'unknown';
-    const moonSign = points?.find(p => p.pointID === 1)?.signName || 'unknown';
-    const risingSign = points?.find(p => p.pointID === 24)?.signName || 'unknown';
+    const sunSign = points.find(p => p.pointID === 0)?.signName || 'unknown';
+    const moonSign = points.find(p => p.pointID === 1)?.signName || 'unknown';
+    const risingSign = points.find(p => p.pointID === 24)?.signName || 'unknown';
 
     res.json({
       success: true,
@@ -98,5 +98,5 @@ app.post('/', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log('✅ Server running on port', PORT);
+  console.log('Server running on port', PORT);
 });
