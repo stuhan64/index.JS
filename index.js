@@ -21,27 +21,6 @@ function encodeBasicAuth(user, pass) {
   return 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
 }
 
-async function getAstroToken() {
-  try {
-    const response = await axios.get(
-      'https://astroapp.com/astroapi/auth',
-      {
-        headers: {
-          'Authorization': encodeBasicAuth(ASTROAPP_USERNAME, ASTROAPP_PASSWORD),
-          'Content-Type': 'application/json',
-          'Key': ASTROAPP_KEY
-        }
-      }
-    );
-    return response.data.token;
-  } catch (err) {
-    console.error("AstroApp token error response:", err.response?.status);
-    console.error("Headers:", err.response?.headers);
-    console.error("Body:", err.response?.data);
-    return null;
-  }
-}
-
 async function geocodeLocation(location) {
   const geoURL = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(location)}&key=${OPENCAGE_KEY}`;
   const res = await axios.get(geoURL);
@@ -63,9 +42,6 @@ app.post('/', async (req, res) => {
   try {
     const { lat, lng } = await geocodeLocation(birthLocation);
     const tz = await getTimeZone(lat, lng);
-    const jwt = await getAstroToken();
-
-    if (!jwt) throw new Error("Missing AstroApp token");
 
     const astroResponse = await axios.post(
       'https://astroapp.com/astro/apis/chart',
@@ -94,19 +70,19 @@ app.post('/', async (req, res) => {
       },
       {
         headers: {
-          'Authorization': `Bearer ${jwt}`,
+          'Authorization': encodeBasicAuth(ASTROAPP_USERNAME, ASTROAPP_PASSWORD),
           'Content-Type': 'application/json',
           'Key': ASTROAPP_KEY
         }
       }
     );
 
-    const imageUrl = astroResponse.data?.chartImageUrl || null;
-    const points = astroResponse.data?.chartPoints || [];
+    const imageUrl = astroResponse.data?.chartImageUrl || 'No image URL returned';
+    const points = astroResponse.data?.chartPoints;
 
-    const sunSign = points.find(p => p.pointID === 0)?.signName || 'unknown';
-    const moonSign = points.find(p => p.pointID === 1)?.signName || 'unknown';
-    const risingSign = points.find(p => p.pointID === 24)?.signName || 'unknown';
+    const sunSign = points?.find(p => p.pointID === 0)?.signName || 'unknown';
+    const moonSign = points?.find(p => p.pointID === 1)?.signName || 'unknown';
+    const risingSign = points?.find(p => p.pointID === 24)?.signName || 'unknown';
 
     res.json({
       success: true,
@@ -116,7 +92,7 @@ app.post('/', async (req, res) => {
       rising: risingSign
     });
   } catch (err) {
-    console.error("Chart generation error:", err.message);
+    console.error("AstroApp chart generation error:", err.response?.data || err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
