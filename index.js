@@ -10,8 +10,8 @@ const PORT = process.env.PORT || 3000;
 
 // === CONFIGURATION ===
 const ASTROAPP_KEY = process.env.ASTROAPP_KEY;
-const ASTROAPP_USERNAME = process.env.ASTROAPP_USERNAME;
-const ASTROAPP_PASSWORD = process.env.ASTROAPP_PASSWORD;
+const ASTROAPP_Username = process.env.ASTROAPP_USERNAME;
+const ASTROAPP_Password = process.env.ASTROAPP_PASSWORD;
 
 const OPENCAGE_KEY = process.env.OPENCAGE_KEY;
 const TIMEZONEDB_KEY = process.env.TIMEZONEDB_KEY;
@@ -24,27 +24,22 @@ function encodeBasicAuth(user, pass) {
 async function getAstroToken() {
   try {
     const response = await axios.post(
-      'https://astroapp.com/astro/token',
+      'https://astroapp.com/astro/apis/chart',
       {},
       {
         headers: {
-          'Authorization': encodeBasicAuth(ASTROAPP_USERNAME, ASTROAPP_PASSWORD),
+          'Authorization': encodeBasicAuth(ASTROAPP_Username, ASTROAPP_Password),
           'Content-Type': 'application/json',
           'Key': ASTROAPP_KEY
         }
       }
     );
-
-    console.log("✅ Token received:", response.data.token);
     return response.data.token;
   } catch (err) {
-    console.error("❌ AstroApp token error response:", err.response?.status);
-    console.error("Headers:", err.response?.headers);
-    console.error("Body:", err.response?.data);
+    console.error("AstroApp token error:", err.response?.data || err.message);
     return null;
   }
 }
-
 
 async function geocodeLocation(location) {
   const geoURL = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(location)}&key=${OPENCAGE_KEY}`;
@@ -93,7 +88,7 @@ app.post('/', async (req, res) => {
           needAspects: "N"
         },
         params: {
-          objects: [0, 1, 24] // Sun, Moon, Ascendant
+          objects: [0, 1, 24] // Sun, Moon, Asc
         }
       },
       {
@@ -120,11 +115,11 @@ app.post('/', async (req, res) => {
       rising: risingSign
     });
   } catch (err) {
-    console.error("❌ Chart generation failed:", err.message);
+    console.error(err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
 app.listen(PORT, () => {
-  console.log('🚀 Server running on port', PORT);
+  console.log('Server running on port', PORT);
 });
