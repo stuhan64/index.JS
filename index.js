@@ -21,34 +21,6 @@ function encodeBasicAuth(user, pass) {
   return 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
 }
 
-async function getAstroToken() {
-  try {
-    const response = await axios.post(
-      'https://astroapp.com/astro/apis/chart',
-      {}, // empty POST body
-      {
-        headers: {
-          'Authorization': encodeBasicAuth(ASTROAPP_USERNAME, ASTROAPP_PASSWORD),
-          'Content-Type': 'application/json',
-          'Key': ASTROAPP_KEY
-        }
-      }
-    );
-
-    const jwt = response.headers.jwt;
-    if (!jwt) throw new Error("No JWT returned in headers");
-    console.log("✅ AstroApp token received");
-    return jwt;
-
-  } catch (err) {
-    console.error("❌ AstroApp token error response:", err.response?.status);
-    console.error("Headers:", err.response?.headers);
-    console.error("Body:", err.response?.data);
-    return null;
-  }
-}
-
-
 async function geocodeLocation(location) {
   const geoURL = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(location)}&key=${OPENCAGE_KEY}`;
   const res = await axios.get(geoURL);
@@ -70,9 +42,6 @@ app.post('/', async (req, res) => {
   try {
     const { lat, lng } = await geocodeLocation(birthLocation);
     const tz = await getTimeZone(lat, lng);
-    const jwt = await getAstroToken();
-
-    if (!jwt) throw new Error("Missing AstroApp token");
 
     const astroResponse = await axios.post(
       'https://astroapp.com/astro/apis/chart',
@@ -101,7 +70,7 @@ app.post('/', async (req, res) => {
       },
       {
         headers: {
-          'Authorization': `Bearer ${jwt}`,
+          'Authorization': encodeBasicAuth(ASTROAPP_USERNAME, ASTROAPP_PASSWORD),
           'Content-Type': 'application/json',
           'Key': ASTROAPP_KEY
         }
@@ -123,7 +92,7 @@ app.post('/', async (req, res) => {
       rising: risingSign
     });
   } catch (err) {
-    console.error(err.message);
+    console.error("AstroApp chart generation error:", err.response?.data || err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
