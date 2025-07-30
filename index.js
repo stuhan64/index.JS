@@ -23,17 +23,24 @@ function encodeBasicAuth(user, pass) {
 
 async function getAstroToken() {
   try {
+    const user = 'stuhan64@gmail.com'; // e.g. stu@zodigear.com
+    const pass = 'Emstujen64`'; // the one provided for AstroApp login
+    const apiKey = 'p4Y5dCexJEb7Uzeg'; // the string like p4Y5dCexJEb7Uzeg
+
+    const basicAuth = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
+
     const response = await axios.post(
       'https://astroapp.com/astro/apis/chart',
       {},
       {
         headers: {
-          'Authorization': encodeBasicAuth(ASTROAPP_USER, ASTROAPP_PASS),
-          'Content-Type': 'application/json',
-          'Key': ASTROAPP_KEY
+          'Authorization': basicAuth,
+          'Key': apiKey,
+          'Content-Type': 'application/json'
         }
       }
     );
+
     return response.data.token;
   } catch (err) {
     console.error("AstroApp token error:", err.response?.data || err.message);
