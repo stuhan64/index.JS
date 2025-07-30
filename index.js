@@ -72,7 +72,6 @@ const astroResponse = await axios.post(
     }
   }
 );
-
       {
         headers: {
           'Authorization': encodeBasicAuth(ASTROAPP_USERNAME, ASTROAPP_PASSWORD),
