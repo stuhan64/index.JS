@@ -10,8 +10,8 @@ const PORT = process.env.PORT || 3000;
 
 // === CONFIGURATION ===
 const ASTROAPP_KEY = process.env.ASTROAPP_KEY;
-const ASTROAPP_Username = process.env.ASTROAPP_USERNAME;
-const ASTROAPP_Password = process.env.ASTROAPP_PASSWORD;
+const ASTROAPP_USER = process.env.ASTROAPP_USER;
+const ASTROAPP_PASS = process.env.ASTROAPP_PASS;
 
 const OPENCAGE_KEY = process.env.OPENCAGE_KEY;
 const TIMEZONEDB_KEY = process.env.TIMEZONEDB_KEY;
@@ -28,7 +28,7 @@ async function getAstroToken() {
       {},
       {
         headers: {
-          'Authorization': encodeBasicAuth(ASTROAPP_Username, ASTROAPP_Password),
+          'Authorization': encodeBasicAuth(ASTROAPP_USER, ASTROAPP_PASS),
           'Content-Type': 'application/json',
           'Key': ASTROAPP_KEY
         }
