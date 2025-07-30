@@ -23,9 +23,8 @@ function encodeBasicAuth(user, pass) {
 
 async function getAstroToken() {
   try {
-    const response = await axios.post(
-      'https://astroapp.com/astro/apis/chart',
-      {},
+    const response = await axios.get(
+      'https://astroapp.com/astro/apis/security/token',
       {
         headers: {
           'Authorization': encodeBasicAuth(ASTROAPP_USER, ASTROAPP_PASS),
@@ -35,10 +34,11 @@ async function getAstroToken() {
       }
     );
 
-    console.log("AstroApp token received:", response.headers.jwt); // Optional debug
-    return response.headers.jwt; // <-- FIXED LINE
+    const jwt = response.data.token;
+    console.log("✅ AstroApp token received.");
+    return jwt;
   } catch (err) {
-    console.error("AstroApp token error response:", err.response?.status);
+    console.error("❌ AstroApp token error response:", err.response?.status);
     console.error("Headers:", err.response?.headers);
     console.error("Body:", err.response?.data);
     return null;
@@ -119,11 +119,11 @@ app.post('/', async (req, res) => {
       rising: risingSign
     });
   } catch (err) {
-    console.error(err.message);
+    console.error("❌ Chart generation failed:", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
 app.listen(PORT, () => {
-  console.log('Server running on port', PORT);
+  console.log('🚀 Server running on port', PORT);
 });
