@@ -77,7 +77,7 @@ app.post('/', async (req, res) => {
       }
     );
 
-    const imageUrl = astroResponse.data?.chartImageUrl || 'No image URL returned';
+    const imageUrl = astroResponse.data?.chartImageUrl || '';
     const points = astroResponse.data?.chartPoints;
 
     const sunSign = points?.find(p => p.pointID === 0)?.signName || 'unknown';
@@ -98,5 +98,5 @@ app.post('/', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log('Server running on port', PORT);
+  console.log('✅ Server running on port', PORT);
 });
