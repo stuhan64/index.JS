@@ -25,7 +25,7 @@ async function getAstroToken() {
   try {
     const response = await axios.post(
       'https://astroapp.com/astro/apis/chart',
-      {},
+      {},  // No body
       {
         headers: {
           'Authorization': encodeBasicAuth(ASTROAPP_USER, ASTROAPP_PASS),
@@ -34,7 +34,9 @@ async function getAstroToken() {
         }
       }
     );
-    return response.data.token;
+
+    // AstroApp returns the token in response.data.jwt
+    return response.data?.jwt || response.data?.token || null;
   } catch (err) {
     console.error("AstroApp token error:", err.response?.data || err.message);
     return null;
