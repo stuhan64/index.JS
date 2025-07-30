@@ -12,7 +12,6 @@ const PORT = process.env.PORT || 3000;
 const ASTROAPP_KEY = process.env.ASTROAPP_KEY;
 const ASTROAPP_USER = process.env.ASTROAPP_USER;
 const ASTROAPP_PASS = process.env.ASTROAPP_PASS;
-
 const OPENCAGE_KEY = process.env.OPENCAGE_KEY;
 const TIMEZONEDB_KEY = process.env.TIMEZONEDB_KEY;
 
@@ -23,9 +22,8 @@ function encodeBasicAuth(user, pass) {
 
 async function getAstroToken() {
   try {
-    const response = await axios.post(
-      'https://astroapp.com/astro/apis/chart',
-      {},
+    const response = await axios.get(
+      'https://astroapp.com/astro/', // this is the auth endpoint to get JWT
       {
         headers: {
           'Authorization': encodeBasicAuth(ASTROAPP_USER, ASTROAPP_PASS),
@@ -34,9 +32,16 @@ async function getAstroToken() {
         }
       }
     );
-    return response.data.token;
+
+    const jwt = response.headers.jwt;
+    if (!jwt) throw new Error("No JWT returned in headers");
+    console.log("✅ Token retrieved:", jwt);
+    return jwt;
+
   } catch (err) {
-    console.error("AstroApp token error:", err.response?.data || err.message);
+    console.error("❌ AstroApp token error response:", err.response?.status || err.message);
+    console.error("Headers:", err.response?.headers);
+    console.error("Body:", err.response?.data);
     return null;
   }
 }
@@ -88,7 +93,7 @@ app.post('/', async (req, res) => {
           needAspects: "N"
         },
         params: {
-          objects: [0, 1, 24] // Sun, Moon, Asc
+          objects: [0, 1, 24]
         }
       },
       {
@@ -115,7 +120,7 @@ app.post('/', async (req, res) => {
       rising: risingSign
     });
   } catch (err) {
-    console.error(err.message);
+    console.error("❌ Chart generation failed:", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
