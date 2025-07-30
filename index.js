@@ -43,31 +43,36 @@ app.post('/', async (req, res) => {
     const { lat, lng } = await geocodeLocation(birthLocation);
     const tz = await getTimeZone(lat, lng);
 
-    const astroResponse = await axios.post(
-      'https://astroapp.com/astro/apis/chart',
-      {
-        chart: {
-          chartData: {
-            chartName: "Customer Chart",
-            chartDate: dateTime,
-            elevation: 0,
-            lat,
-            lng,
-            tz,
-            zodiacID: 100,
-            houseSystemID: 1,
-            coordSys: "G",
-            version: 1
-          }
-        },
-        calcRequestProps: {
-          needImage: "Y",
-          needAspects: "N"
-        },
-        params: {
-          objects: [0, 1, 24] // Sun, Moon, Ascendant
-        }
-      },
+const astroResponse = await axios.post(
+  'https://astroapp.com/astro/apis/chart',
+  {
+    chart: {
+      chartData: {
+        chartName: "Customer Chart",
+        chartDate: dateTime,
+        elevation: 0,
+        lat,
+        lng,
+        tz,
+        zodiacID: 100,
+        houseSystemID: 1,
+        coordSys: "G",
+        version: 1,
+        needImage: "Y",
+        needAspects: "N",
+        points: [0, 1, 24] // Sun, Moon, Ascendant
+      }
+    }
+  },
+  {
+    headers: {
+      'Authorization': `Bearer ${jwt}`,
+      'Content-Type': 'application/json',
+      'Key': ASTROAPP_KEY
+    }
+  }
+);
+
       {
         headers: {
           'Authorization': encodeBasicAuth(ASTROAPP_USERNAME, ASTROAPP_PASSWORD),
