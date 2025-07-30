@@ -25,7 +25,7 @@ async function getAstroToken() {
   try {
     const response = await axios.post(
       'https://astroapp.com/astro/apis/chart',
-      {},  // No body
+      {}, // Empty body
       {
         headers: {
           'Authorization': encodeBasicAuth(ASTROAPP_USER, ASTROAPP_PASS),
@@ -35,8 +35,12 @@ async function getAstroToken() {
       }
     );
 
-    // AstroApp returns the token in response.data.jwt
-    return response.data?.jwt || response.data?.token || null;
+    const jwt = response.data?.jwt || response.data?.token;
+    if (!jwt) {
+      console.error("Token response missing expected field:", response.data);
+    }
+
+    return jwt;
   } catch (err) {
     console.error("AstroApp token error:", err.response?.data || err.message);
     return null;
@@ -90,7 +94,7 @@ app.post('/', async (req, res) => {
           needAspects: "N"
         },
         params: {
-          objects: [0, 1, 24] // Sun, Moon, Asc
+          objects: [0, 1, 24] // Sun, Moon, Ascendant
         }
       },
       {
