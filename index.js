@@ -23,8 +23,9 @@ function encodeBasicAuth(user, pass) {
 
 async function getAstroToken() {
   try {
-    const response = await axios.get(
-      'https://astroapp.com/astroapi/auth',
+    const response = await axios.post(
+      'https://astroapp.com/astro/apis/chart',
+      {}, // empty POST body
       {
         headers: {
           'Authorization': encodeBasicAuth(ASTROAPP_USERNAME, ASTROAPP_PASSWORD),
@@ -33,14 +34,20 @@ async function getAstroToken() {
         }
       }
     );
-    return response.data.token;
+
+    const jwt = response.headers.jwt;
+    if (!jwt) throw new Error("No JWT returned in headers");
+    console.log("✅ AstroApp token received");
+    return jwt;
+
   } catch (err) {
-    console.error("AstroApp token error response:", err.response?.status);
+    console.error("❌ AstroApp token error response:", err.response?.status);
     console.error("Headers:", err.response?.headers);
     console.error("Body:", err.response?.data);
     return null;
   }
 }
+
 
 async function geocodeLocation(location) {
   const geoURL = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(location)}&key=${OPENCAGE_KEY}`;
