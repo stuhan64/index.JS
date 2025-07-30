@@ -26,7 +26,7 @@ async function getAstroToken() {
     const basicAuth = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
 
     const response = await axios.post(
-      'https://astroapp.com/astro/apis/token', // << Use this endpoint for token!
+      'https://astroapp.com/astro/apis/chart', // << Use this endpoint for token!
       {},
       {
         headers: {
