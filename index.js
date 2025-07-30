@@ -42,7 +42,14 @@ async function getAstroToken() {
 
     return jwt;
   } catch (err) {
-    console.error("AstroApp token error:", err.response?.data || err.message);
+ if (err.response) {
+  console.error("AstroApp token error response:", err.response.status, err.response.statusText);
+  console.error("Headers:", err.response.headers);
+  console.error("Body:", err.response.data);
+} else {
+  console.error("AstroApp token error:", err.message);
+}
+
     return null;
   }
 }
