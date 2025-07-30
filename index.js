@@ -8,6 +8,7 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
+// === CONFIGURATION ===
 const ASTROAPP_KEY = process.env.ASTROAPP_KEY;
 const ASTROAPP_USERNAME = process.env.ASTROAPP_USERNAME;
 const ASTROAPP_PASSWORD = process.env.ASTROAPP_PASSWORD;
@@ -15,31 +16,9 @@ const ASTROAPP_PASSWORD = process.env.ASTROAPP_PASSWORD;
 const OPENCAGE_KEY = process.env.OPENCAGE_KEY;
 const TIMEZONEDB_KEY = process.env.TIMEZONEDB_KEY;
 
+// === HELPER FUNCTIONS ===
 function encodeBasicAuth(user, pass) {
   return 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
-}
-
-async function getAstroToken() {
-  try {
-    const response = await axios.get(
-      'https://astroapp.com/astroapi/auth', // double-check this URL against your docs
-      {
-        headers: {
-          'Authorization': encodeBasicAuth(ASTROAPP_USERNAME, ASTROAPP_PASSWORD),
-          'Content-Type': 'application/json',
-          'Key': ASTROAPP_KEY
-        }
-      }
-    );
-
-    console.log("✅ AstroApp token received.");
-    return response.data.token; // token structure must match their response
-  } catch (err) {
-    console.error("❌ AstroApp token error:", err.response?.status || err.message);
-    console.error("Headers:", err.response?.headers);
-    console.error("Body:", err.response?.data);
-    return null;
-  }
 }
 
 async function geocodeLocation(location) {
@@ -55,18 +34,16 @@ async function getTimeZone(lat, lng) {
   return res.data.zoneName;
 }
 
+// === MAIN API ROUTE ===
 app.post('/', async (req, res) => {
-  console.log("📩 Received front-end request:", req.body);
-
   const { birthDate, birthTime, birthLocation } = req.body;
   const dateTime = `${birthDate}T${birthTime}:00`;
 
   try {
+    console.log("📩 Received front-end request:", req.body);
+
     const { lat, lng } = await geocodeLocation(birthLocation);
     const tz = await getTimeZone(lat, lng);
-    const jwt = await getAstroToken();
-
-    if (!jwt) throw new Error("Missing AstroApp token");
 
     const astroResponse = await axios.post(
       'https://astroapp.com/astro/apis/chart',
@@ -90,19 +67,18 @@ app.post('/', async (req, res) => {
           needAspects: "N"
         },
         params: {
-          objects: [0, 1, 24]
+          objects: [0, 1, 24] // Sun, Moon, Ascendant
         }
       },
       {
         headers: {
-          'Authorization': `Bearer ${jwt}`,
+          'Authorization': encodeBasicAuth(ASTROAPP_USERNAME, ASTROAPP_PASSWORD),
           'Content-Type': 'application/json',
           'Key': ASTROAPP_KEY
         }
       }
     );
 
-    console.log("✅ Chart created. Sending back data.");
     const imageUrl = astroResponse.data?.chartImageUrl || 'No image URL returned';
     const points = astroResponse.data?.chartPoints;
 
@@ -124,5 +100,5 @@ app.post('/', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log('✅ Server running on port', PORT);
 });
