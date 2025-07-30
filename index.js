@@ -17,15 +17,11 @@ const OPENCAGE_KEY = process.env.OPENCAGE_KEY;
 const TIMEZONEDB_KEY = process.env.TIMEZONEDB_KEY;
 
 // === HELPER FUNCTIONS ===
-function encodeBasicAuth(user, pass) {
-  return 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
-}
-
 async function getAstroToken() {
   try {
-    const user = 'stuhan64@gmail.com'; // e.g. stu@zodigear.com
-    const pass = 'Emstujen64`'; // the one provided for AstroApp login
-    const apiKey = 'p4Y5dCexJEb7Uzeg'; // the string like p4Y5dCexJEb7Uzeg
+    const user = 'stuhan64@gmail.com';
+    const pass = 'Emstujen64`';
+    const apiKey = 'p4Y5dCexJEb7Uzeg';
 
     const basicAuth = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
 
