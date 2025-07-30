@@ -21,6 +21,27 @@ function encodeBasicAuth(user, pass) {
   return 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
 }
 
+async function getAstroToken() {
+  try {
+    const response = await axios.get(
+      'https://astroapp.com/astroapi/auth',
+      {
+        headers: {
+          'Authorization': encodeBasicAuth(ASTROAPP_USERNAME, ASTROAPP_PASSWORD),
+          'Content-Type': 'application/json',
+          'Key': ASTROAPP_KEY
+        }
+      }
+    );
+    return response.data.token;
+  } catch (err) {
+    console.error("AstroApp token error response:", err.response?.status);
+    console.error("Headers:", err.response?.headers);
+    console.error("Body:", err.response?.data);
+    return null;
+  }
+}
+
 async function geocodeLocation(location) {
   const geoURL = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(location)}&key=${OPENCAGE_KEY}`;
   const res = await axios.get(geoURL);
@@ -42,51 +63,50 @@ app.post('/', async (req, res) => {
   try {
     const { lat, lng } = await geocodeLocation(birthLocation);
     const tz = await getTimeZone(lat, lng);
+    const jwt = await getAstroToken();
 
-const astroResponse = await axios.post(
-  'https://astroapp.com/astro/apis/chart',
-  {
-    chart: {
-      chartData: {
-        chartName: "Customer Chart",
-        chartDate: dateTime,
-        elevation: 0,
-        lat,
-        lng,
-        tz,
-        zodiacID: 100,
-        houseSystemID: 1,
-        coordSys: "G",
-        version: 1,
-        needImage: "Y",
-        needAspects: "N",
-        points: [0, 1, 24] // Sun, Moon, Ascendant
-      }
-    }
-  },
-  {
-    headers: {
-      'Authorization': `Bearer ${jwt}`,
-      'Content-Type': 'application/json',
-      'Key': ASTROAPP_KEY
-    }
-  }
-);
+    if (!jwt) throw new Error("Missing AstroApp token");
+
+    const astroResponse = await axios.post(
+      'https://astroapp.com/astro/apis/chart',
+      {
+        chart: {
+          chartData: {
+            chartName: "Customer Chart",
+            chartDate: dateTime,
+            elevation: 0,
+            lat,
+            lng,
+            tz,
+            zodiacID: 100,
+            houseSystemID: 1,
+            coordSys: "G",
+            version: 1
+          }
+        },
+        calcRequestProps: {
+          needImage: "Y",
+          needAspects: "N"
+        },
+        params: {
+          objects: [0, 1, 24] // Sun, Moon, Ascendant
+        }
+      },
       {
         headers: {
-          'Authorization': encodeBasicAuth(ASTROAPP_USERNAME, ASTROAPP_PASSWORD),
+          'Authorization': `Bearer ${jwt}`,
           'Content-Type': 'application/json',
           'Key': ASTROAPP_KEY
         }
       }
     );
 
-    const imageUrl = astroResponse.data?.chartImageUrl || 'No image URL returned';
-    const points = astroResponse.data?.chartPoints;
+    const imageUrl = astroResponse.data?.chartImageUrl || null;
+    const points = astroResponse.data?.chartPoints || [];
 
-    const sunSign = points?.find(p => p.pointID === 0)?.signName || 'unknown';
-    const moonSign = points?.find(p => p.pointID === 1)?.signName || 'unknown';
-    const risingSign = points?.find(p => p.pointID === 24)?.signName || 'unknown';
+    const sunSign = points.find(p => p.pointID === 0)?.signName || 'unknown';
+    const moonSign = points.find(p => p.pointID === 1)?.signName || 'unknown';
+    const risingSign = points.find(p => p.pointID === 24)?.signName || 'unknown';
 
     res.json({
       success: true,
@@ -96,7 +116,7 @@ const astroResponse = await axios.post(
       rising: risingSign
     });
   } catch (err) {
-    console.error("AstroApp chart generation error:", err.response?.data || err.message);
+    console.error("Chart generation error:", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
