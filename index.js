@@ -49,7 +49,7 @@ function signFromLongitude(lng) {
 
 // === UTILS ===
 function encodeBasicAuth(user, pass) {
-  return 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
+  return 'Basic ' + Buffer.from(user + ':' + pass).toString('base64');
 }
 
 function safeError(err) {
