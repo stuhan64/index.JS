@@ -222,11 +222,35 @@ app.get('/token-test', async (_req, res) => {
   }
 });
 
-// Printful variant lookup
+// Printful variant lookup — uses sync endpoint for Shopify-connected stores
 app.get('/printful-variants', async (_req, res) => {
   try {
     const r = await axios.get(
-      `https://api.printful.com/store/products?store_id=${PRINTFUL_STORE_ID}`,
+      'https://api.printful.com/sync/products',
+      { headers: printfulHeaders() }
+    );
+    const products = r.data?.result || [];
+    const summary = await Promise.all(products.map(async p => {
+      const detail = await axios.get(
+        `https://api.printful.com/sync/products/${p.id}`,
+        { headers: printfulHeaders() }
+      );
+      const variants = (detail.data?.result?.sync_variants || []).map(v => ({
+        id:       v.id,
+        name:     v.name,
+        size:     v.product?.size,
+        color:    v.product?.color,
+        price:    v.retail_price,
+        currency: v.currency
+      }));
+      return { id: p.id, name: p.name, variants };
+    }));
+    res.json({ ok: true, products: summary });
+  } catch (err) {
+    console.error('[PRINTFUL] Error:', JSON.stringify(safeError(err)));
+    res.status(500).json({ ok: false, error: safeError(err) });
+  }
+});
       { headers: printfulHeaders() }
     );
     const products = r.data?.result || [];
