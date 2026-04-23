@@ -232,7 +232,7 @@ app.get('/printful-variants', async (_req, res) => {
     const products = r.data?.result || [];
     const summary = await Promise.all(products.map(async p => {
       const detail = await axios.get(
-        `https://api.printful.com/sync/products/${p.id}`,
+        'https://api.printful.com/sync/products/' + p.id,
         { headers: printfulHeaders() }
       );
       const variants = (detail.data?.result?.sync_variants || []).map(v => ({
@@ -242,30 +242,6 @@ app.get('/printful-variants', async (_req, res) => {
         color:    v.product?.color,
         price:    v.retail_price,
         currency: v.currency
-      }));
-      return { id: p.id, name: p.name, variants };
-    }));
-    res.json({ ok: true, products: summary });
-  } catch (err) {
-    console.error('[PRINTFUL] Error:', JSON.stringify(safeError(err)));
-    res.status(500).json({ ok: false, error: safeError(err) });
-  }
-});
-      { headers: printfulHeaders() }
-    );
-    const products = r.data?.result || [];
-    const summary = await Promise.all(products.map(async p => {
-      // Get full product details including variants
-      const detail = await axios.get(
-        `https://api.printful.com/store/products/${p.id}?store_id=${PRINTFUL_STORE_ID}`,
-        { headers: printfulHeaders() }
-      );
-      const variants = (detail.data?.result?.sync_variants || []).map(v => ({
-        id:    v.id,
-        name:  v.name,
-        size:  v.size,
-        color: v.color,
-        price: v.retail_price
       }));
       return { id: p.id, name: p.name, variants };
     }));
