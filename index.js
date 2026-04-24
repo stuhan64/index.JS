@@ -330,12 +330,41 @@ app.post('/', async (req, res) => {
   }
 });
 
+// === VARIANT ID LOOKUP MAP ===
+const VARIANT_MAP = {
+  wheel: {
+    womens: {
+      S: 4873605214, M: 4873605215, L: 4873605216, XL: 4873605217, '2XL': 4873605218
+    },
+    unisex: {
+      S: 4871492274, M: 4871492277, L: 4871492278, XL: 4871492279,
+      '2XL': 4871492280, '3XL': 4871492281, '4XL': 4871492282, '5XL': 4871492283
+    }
+  },
+  trio: {
+    womens: {
+      S: 4872341918, M: 4872341919, L: 4872341920, XL: 4872341921, '2XL': 4872341922
+    },
+    unisex: {
+      S: 5279671752, M: 5279671753, L: 5279671754, XL: 5279671755,
+      '2XL': 5279671757, '3XL': 5279671758, '4XL': 5279671759, '5XL': 5279671760
+    }
+  }
+};
+
+function getVariantId(design, fit, size) {
+  const variantId = VARIANT_MAP[design]?.[fit]?.[size];
+  return variantId || null;
+}
+
 // Create Printful order
 app.post('/create-order', async (req, res) => {
   try {
     const {
       designUrl,
-      variantId,
+      design,       // 'wheel' or 'trio'
+      fit,          // 'womens' or 'unisex'
+      size,         // 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'
       customerName,
       customerEmail,
       address1,
@@ -346,11 +375,19 @@ app.post('/create-order', async (req, res) => {
       zip
     } = req.body;
 
-    if (!designUrl || !variantId || !customerName || !customerEmail || !address1 || !city || !countryCode || !zip) {
+    if (!designUrl || !design || !fit || !size || !customerName || !customerEmail || !address1 || !city || !countryCode || !zip) {
       return res.status(400).json({ success: false, error: 'Missing required order fields' });
     }
 
-    console.log(`[ORDER] Creating order for ${customerName}, variant ${variantId}`);
+    const variantId = getVariantId(design, fit, size);
+    if (!variantId) {
+      return res.status(400).json({
+        success: false,
+        error: `No variant found for design=${design}, fit=${fit}, size=${size}`
+      });
+    }
+
+    console.log(`[ORDER] Creating order for ${customerName} — ${design}/${fit}/${size} (variant ${variantId})`);
 
     const orderPayload = {
       recipient: {
@@ -380,9 +417,11 @@ app.post('/create-order', async (req, res) => {
 
     console.log(`[ORDER] ✅ Created: ${r.data?.result?.id}`);
     return res.json({
-      success: true,
-      orderId: r.data?.result?.id,
-      status:  r.data?.result?.status
+      success:   true,
+      orderId:   r.data?.result?.id,
+      status:    r.data?.result?.status,
+      variantId,
+      design, fit, size
     });
 
   } catch (err) {
