@@ -8,7 +8,22 @@ const crypto   = require('crypto');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+
+// Store raw body for webhook HMAC verification before express.json() parses it
+app.use((req, res, next) => {
+  if (req.path === '/webhook-order') {
+    let raw = '';
+    req.setEncoding('utf8');
+    req.on('data', chunk => { raw += chunk; });
+    req.on('end', () => {
+      req.rawBody = raw;
+      try { req.body = JSON.parse(raw); } catch(e) { req.body = {}; }
+      next();
+    });
+  } else {
+    express.json()(req, res, next);
+  }
+});
 
 const PORT = process.env.PORT || 10000;
 
@@ -565,14 +580,14 @@ app.post('/upload-design', async (req, res) => {
 
 // Webhook needs raw body for HMAC verification — must be registered BEFORE express.json()
 // We handle this by reading raw body manually
-app.post('/webhook-order', express.raw({ type: 'application/json' }), async (req, res) => {
+app.post('/webhook-order', async (req, res) => {
   try {
     // === Verify webhook is genuinely from Shopify ===
     const hmacHeader = req.headers['x-shopify-hmac-sha256'];
     if (SHOPIFY_WEBHOOK_SECRET && hmacHeader) {
       const hash = crypto
         .createHmac('sha256', SHOPIFY_WEBHOOK_SECRET)
-        .update(req.body)
+        .update(req.rawBody || '')
         .digest('base64');
       if (hash !== hmacHeader) {
         console.warn('[WEBHOOK] HMAC verification failed — rejecting request');
@@ -580,8 +595,8 @@ app.post('/webhook-order', express.raw({ type: 'application/json' }), async (req
       }
     }
 
-    // Parse order
-    const order = JSON.parse(req.body.toString());
+    // Order is already parsed by our middleware
+    const order = req.body;
     console.log(`[WEBHOOK] Order received: #${order.order_number} (${order.id})`);
 
     // Process each line item
