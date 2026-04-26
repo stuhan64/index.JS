@@ -555,9 +555,11 @@ app.post('/upload-design', async (req, res) => {
 
       const base64Image = 'data:image/png;base64,' + composite.toString('base64');
       const timestamp   = Math.round(Date.now() / 1000);
+      // Cloudinary signature: all params except file/api_key sorted alphabetically + secret
+      const sigString   = 'folder=zodigear&timestamp=' + timestamp + CLOUDINARY_SECRET;
       const signature   = crypto
         .createHash('sha1')
-        .update('timestamp=' + timestamp + CLOUDINARY_SECRET)
+        .update(sigString)
         .digest('hex');
 
       const form = new FormData();
