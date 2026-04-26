@@ -553,21 +553,14 @@ app.post('/upload-design', async (req, res) => {
         throw new Error('Cloudinary credentials not configured');
       }
 
-      const base64Image = 'data:image/png;base64,' + composite.toString('base64');
-      const timestamp   = Math.round(Date.now() / 1000);
-      // Cloudinary signature: all params except file/api_key sorted alphabetically + secret
-      const sigString   = 'folder=zodigear&timestamp=' + timestamp + CLOUDINARY_SECRET;
-      const signature   = crypto
-        .createHash('sha1')
-        .update(sigString)
-        .digest('hex');
+      // Use Cloudinary's unsigned upload preset to avoid signature issues
+      // Create an unsigned upload preset in Cloudinary dashboard first
+      const base64Image = composite.toString('base64');
 
       const form = new FormData();
-      form.append('file',       base64Image);
-      form.append('api_key',    CLOUDINARY_KEY);
-      form.append('timestamp',  String(timestamp));
-      form.append('signature',  signature);
-      form.append('folder',     'zodigear');
+      form.append('file',           'data:image/png;base64,' + base64Image);
+      form.append('upload_preset',  'zodigear_unsigned');
+      form.append('folder',         'zodigear');
 
       const uploadRes = await axios.post(
         'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD + '/image/upload',
