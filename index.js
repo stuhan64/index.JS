@@ -36,6 +36,9 @@ const TIMEZONEDB_KEY   = process.env.TIMEZONEDB_KEY;
 const PRINTFUL_KEY     = process.env.PRINTFUL_KEY;
 const PRINTFUL_STORE_ID = process.env.PRINTFUL_STORE_ID || '16293860';
 const IMGBB_KEY             = process.env.IMGBB_KEY;
+const CLOUDINARY_CLOUD      = process.env.CLOUDINARY_CLOUD;
+const CLOUDINARY_KEY        = process.env.CLOUDINARY_KEY;
+const CLOUDINARY_SECRET     = process.env.CLOUDINARY_SECRET;
 const SHOPIFY_WEBHOOK_SECRET = process.env.SHOPIFY_WEBHOOK_SECRET;
 const SHOPIFY_STORE          = process.env.SHOPIFY_STORE || 'zodi-gear.myshopify.com';
 
@@ -545,21 +548,35 @@ app.post('/upload-design', async (req, res) => {
       .png()
       .toBuffer();
 
-      // Upload to imgbb
+      // Upload to Cloudinary
+      if (!CLOUDINARY_CLOUD || !CLOUDINARY_KEY || !CLOUDINARY_SECRET) {
+        throw new Error('Cloudinary credentials not configured');
+      }
+
+      const base64Image = 'data:image/png;base64,' + composite.toString('base64');
+      const timestamp   = Math.round(Date.now() / 1000);
+      const signature   = crypto
+        .createHash('sha1')
+        .update('timestamp=' + timestamp + CLOUDINARY_SECRET)
+        .digest('hex');
+
       const form = new FormData();
-      form.append('image', composite.toString('base64'));
-      form.append('expiration', '15552000'); // 6 months in seconds
+      form.append('file',       base64Image);
+      form.append('api_key',    CLOUDINARY_KEY);
+      form.append('timestamp',  String(timestamp));
+      form.append('signature',  signature);
+      form.append('folder',     'zodigear');
 
       const uploadRes = await axios.post(
-        'https://api.imgbb.com/1/upload?key=' + IMGBB_KEY,
+        'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD + '/image/upload',
         form,
         { headers: form.getHeaders(), timeout: 30000 }
       );
 
-      const url = uploadRes.data?.data?.url;
-      if (!url) throw new Error('imgbb upload failed: ' + JSON.stringify(uploadRes.data));
+      const url = uploadRes.data?.secure_url;
+      if (!url) throw new Error('Cloudinary upload failed: ' + JSON.stringify(uploadRes.data));
 
-      console.log('[UPLOAD] Trio uploaded:', url);
+      console.log('[UPLOAD] Trio uploaded to Cloudinary:', url);
       return res.json({ success: true, url, type: 'trio' });
 
     } else {
@@ -621,60 +638,83 @@ app.post('/webhook-order', async (req, res) => {
       console.log(`[WEBHOOK] Processing item: ${item.title} | design=${designType} | sun=${sunSign} moon=${moonSign} rising=${risingSign}`);
       console.log(`[WEBHOOK] Design URL: ${designUrl}`);
 
-      // Build Printful order payload
-      const recipient = {
-        name:         order.shipping_address?.name         || order.billing_address?.name,
-        email:        order.email,
-        address1:     order.shipping_address?.address1     || order.billing_address?.address1,
-        address2:     order.shipping_address?.address2     || order.billing_address?.address2 || '',
-        city:         order.shipping_address?.city         || order.billing_address?.city,
-        state_code:   order.shipping_address?.province_code || order.billing_address?.province_code || '',
-        country_code: order.shipping_address?.country_code || order.billing_address?.country_code,
-        zip:          order.shipping_address?.zip          || order.billing_address?.zip,
-        phone:        order.shipping_address?.phone        || order.billing_address?.phone || ''
-      };
+      // Printful already receives the order automatically via Shopify app connection
+      // We just need to find the Printful order and update the print file
+      // Printful uses the Shopify order ID as external_id
+      console.log(`[WEBHOOK] Finding Printful order for Shopify order ${order.id}...`);
 
-      // Get Printful variant ID from our map
-      // item.variant_id is the Shopify variant ID — we need the matching Printful variant ID
-      const printfulVariantId = shopifyToPrintfulVariant(item.variant_id);
-
-      if (!printfulVariantId) {
-        console.warn(`[WEBHOOK] No Printful variant found for Shopify variant ${item.variant_id}`);
-        continue;
-      }
-
-      const printfulPayload = {
-        external_id: 'shopify-' + order.id + '-' + item.id,
-        recipient,
-        items: [
-          {
-            variant_id: printfulVariantId,
-            quantity:   item.quantity,
-            files: [
-              {
-                type: 'front',
-                url:  designUrl
-              }
-            ]
-          }
-        ],
-        retail_costs: {
-          currency:  order.currency,
-          subtotal:  item.price,
-          total:     item.price
-        }
-      };
-
-      // Submit to Printful
       try {
-        const r = await axios.post(
-          'https://api.printful.com/orders',
-          printfulPayload,
+        // Wait a few seconds for Printful to create the order from Shopify
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        // Find the Printful order by Shopify order ID
+        const searchRes = await axios.get(
+          'https://api.printful.com/orders?external_id=' + order.id,
           { headers: printfulHeaders() }
         );
-        console.log(`[WEBHOOK] Printful order created: ${r.data?.result?.id} for Shopify order #${order.order_number}`);
+
+        const printfulOrders = searchRes.data?.result || [];
+        console.log(`[WEBHOOK] Found ${printfulOrders.length} Printful order(s) for Shopify order ${order.id}`);
+
+        // Try to find by order name/number if external_id search fails
+        let printfulOrder = printfulOrders[0];
+
+        if (!printfulOrder) {
+          // Search recent orders and match by Shopify order number
+          const recentRes = await axios.get(
+            'https://api.printful.com/orders?limit=10',
+            { headers: printfulHeaders() }
+          );
+          const recentOrders = recentRes.data?.result || [];
+          printfulOrder = recentOrders.find(o =>
+            o.external_id === String(order.id) ||
+            o.external_id === order.name
+          );
+          if (printfulOrder) {
+            console.log(`[WEBHOOK] Found Printful order by recent search: ${printfulOrder.id}`);
+          }
+        }
+
+        if (!printfulOrder) {
+          console.warn(`[WEBHOOK] Could not find Printful order for Shopify order ${order.id} — will need manual print file update`);
+          continue;
+        }
+
+        const pfOrderId = printfulOrder.id;
+        console.log(`[WEBHOOK] Updating print file on Printful order ${pfOrderId}`);
+
+        // Update the print file on the Printful order item
+        // Find the matching item in the Printful order
+        const pfItems = printfulOrder.items || [];
+        for (const pfItem of pfItems) {
+          try {
+            const updateRes = await axios.post(
+              'https://api.printful.com/orders/' + pfOrderId + '/items/' + pfItem.id,
+              {
+                files: [{ type: 'front', url: designUrl }]
+              },
+              { headers: printfulHeaders() }
+            );
+            console.log(`[WEBHOOK] Print file updated on Printful order ${pfOrderId}, item ${pfItem.id}`);
+          } catch (itemErr) {
+            // If item update fails, try updating the whole order
+            console.warn(`[WEBHOOK] Item update failed, trying order-level update:`, JSON.stringify(safeError(itemErr)));
+            const orderUpdateRes = await axios.put(
+              'https://api.printful.com/orders/' + pfOrderId,
+              {
+                items: pfItems.map(i => ({
+                  id:    i.id,
+                  files: i.id === pfItem.id ? [{ type: 'front', url: designUrl }] : i.files
+                }))
+              },
+              { headers: printfulHeaders() }
+            );
+            console.log(`[WEBHOOK] Order-level update response:`, orderUpdateRes.data?.code);
+          }
+        }
+
       } catch (printfulErr) {
-        console.error(`[WEBHOOK] Printful error for item ${item.id}:`, JSON.stringify(safeError(printfulErr)));
+        console.error(`[WEBHOOK] Printful update error for item ${item.id}:`, JSON.stringify(safeError(printfulErr)));
       }
     }
 
