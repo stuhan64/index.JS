@@ -61,38 +61,47 @@ function safeError(err) {
 }
 
 // === TOKEN CACHE ===
-// AstroApp tokens expire after 100 uses OR 60 minutes
-// We cache and reuse, refreshing automatically when expired
-let cachedToken = null;
-let tokenExpiry  = 0;
+// AstroApp tokens expire after 100 uses OR 60 minutes — whichever comes first
+let cachedToken   = null;
+let tokenExpiry   = 0;
+let tokenUseCount = 0;
+const TOKEN_MAX_USES = 90; // refresh at 90 uses, safely before the 100 limit
 
 function getCachedToken() {
-  if (cachedToken && Date.now() < tokenExpiry - 30000) {
-    console.log('[TOKEN] Using cached token');
+  if (cachedToken && Date.now() < tokenExpiry - 30000 && tokenUseCount < TOKEN_MAX_USES) {
+    tokenUseCount++;
+    console.log('[TOKEN] Using cached token (use #' + tokenUseCount + ')');
     return cachedToken;
   }
-  cachedToken = null;
-  tokenExpiry  = 0;
+  if (cachedToken) {
+    console.log('[TOKEN] Token invalidated — refreshing');
+  }
+  cachedToken   = null;
+  tokenExpiry   = 0;
+  tokenUseCount = 0;
   return null;
 }
 
 function cacheToken(jwt) {
-  cachedToken = jwt;
-  tokenExpiry = Date.now() + (55 * 60 * 1000); // 55 min to stay under 60 min limit
-  console.log('[TOKEN] ✅ Token cached');
+  cachedToken   = jwt;
+  tokenExpiry   = Date.now() + (55 * 60 * 1000);
+  tokenUseCount = 1;
+  console.log('[TOKEN] Token cached (fresh)');
+}
+
+function isExpiredResponse(data) {
+  if (typeof data === 'string' && data.trim().toUpperCase() === 'EXPIRED') return true;
+  if (data?.jwt === 'EXPIRED' || data?.token === 'EXPIRED') return true;
+  return false;
 }
 
 // === ASTROAPP CHART REQUEST ===
-// Key insight from AstroApp support:
-// - First request: use Basic Auth + real chart payload → returns chart data + JWT token
-// - Subsequent requests: use Bearer token + real chart payload
-// - There is NO separate token endpoint — the token comes back with the first real request
 async function fetchChart(payload, useBasicAuth) {
   const authHeader = useBasicAuth
     ? encodeBasicAuth(ASTROAPP_USER, ASTROAPP_PASS)
     : 'Bearer ' + cachedToken;
 
-  console.log(`[ASTRO] Calling chart API with ${useBasicAuth ? 'Basic Auth' : 'Bearer token'}`);
+  console.log('[ASTRO] Calling chart API with ' + (useBasicAuth ? 'Basic Auth' : 'Bearer token'));
 
   const response = await axios.post(
     'https://astroapp.com/astro/apis/chart',
@@ -107,35 +116,43 @@ async function fetchChart(payload, useBasicAuth) {
     }
   );
 
-  // Extract and cache JWT from response if present
+  // Check for EXPIRED token response
+  if (isExpiredResponse(response.data)) {
+    console.warn('[TOKEN] AstroApp returned EXPIRED — clearing token');
+    cachedToken = null; tokenExpiry = 0; tokenUseCount = 0;
+    throw new Error('TOKEN_EXPIRED');
+  }
+
+  // Cache fresh JWT if returned
   const jwt = response.data?.jwt || response.data?.token;
-  if (jwt) {
+  if (jwt && jwt !== 'EXPIRED') {
     cacheToken(jwt);
   }
 
   return response.data;
 }
 
-// Main chart fetch with automatic Basic Auth fallback
+// Main chart fetch — Bearer token first, auto-retry with Basic Auth on failure or expiry
 async function getChart(payload) {
   const token = getCachedToken();
 
   if (token) {
-    // Try with cached Bearer token first
     try {
       return await fetchChart(payload, false);
     } catch (err) {
-      const status = err?.response?.status;
-      console.warn(`[ASTRO] Bearer token failed (${status}), retrying with Basic Auth...`);
-      // Fall through to Basic Auth
+      console.warn('[ASTRO] Bearer failed (' + err.message + '), retrying with Basic Auth...');
+      cachedToken = null; tokenExpiry = 0; tokenUseCount = 0;
     }
   }
 
-  // Use Basic Auth — first call or token expired/failed
+  // Basic Auth — always works, also returns fresh token
   try {
-    const data = await fetchChart(payload, true);
-    return data;
+    return await fetchChart(payload, true);
   } catch (err) {
+    if (err.message === 'TOKEN_EXPIRED') {
+      console.warn('[ASTRO] EXPIRED on Basic Auth, retrying once...');
+      return await fetchChart(payload, true);
+    }
     console.error('[ASTRO] Basic Auth failed:', JSON.stringify(safeError(err)));
     throw new Error('AstroApp authentication failed: ' + JSON.stringify(safeError(err)));
   }
