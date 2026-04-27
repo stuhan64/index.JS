@@ -500,20 +500,21 @@ app.post('/upload-design', async (req, res) => {
         axios.get(CDN + 'moon.'   + moon   + '.png', { responseType: 'arraybuffer' }).then(r => Buffer.from(r.data))
       ]);
 
-      // Size constants — Sun dominant, Rising/Moon at 43%
-      const sunSize    = 500;
-      const smallSize  = 215;
+      // Size constants - Sun dominant, Rising/Moon at 43%
+      // 2400px wide for high quality DTG print (300 DPI at 8 inches)
+      const sunSize    = 900;
+      const smallSize  = 390;
       const lineW      = sunSize;
-      const lineH      = 4;
-      const gap        = 20;
-      const canvasW    = sunSize + 40;
-      const canvasH    = smallSize + gap + lineH + gap + sunSize + gap + lineH + gap + smallSize + 20;
+      const lineH      = 6;
+      const gap        = 36;
+      const canvasW    = sunSize + 80;
+      const canvasH    = smallSize + gap + lineH + gap + sunSize + gap + lineH + gap + smallSize + 40;
 
-      // Resize images
+      // Resize images — keep transparent backgrounds for proper compositing
       const [risingResized, sunResized, moonResized] = await Promise.all([
-        sharp(risingBuf).resize(smallSize, smallSize, { fit: 'contain', background: { r:0,g:0,b:0,alpha:0 } }).png().toBuffer(),
-        sharp(sunBuf).resize(sunSize, sunSize, { fit: 'contain', background: { r:0,g:0,b:0,alpha:0 } }).png().toBuffer(),
-        sharp(moonBuf).resize(smallSize, smallSize, { fit: 'contain', background: { r:0,g:0,b:0,alpha:0 } }).png().toBuffer()
+        sharp(risingBuf).resize(smallSize, smallSize, { fit: 'contain', background: { r:255,g:255,b:255,alpha:0 } }).png().toBuffer(),
+        sharp(sunBuf).resize(sunSize, sunSize, { fit: 'contain', background: { r:255,g:255,b:255,alpha:0 } }).png().toBuffer(),
+        sharp(moonBuf).resize(smallSize, smallSize, { fit: 'contain', background: { r:255,g:255,b:255,alpha:0 } }).png().toBuffer()
       ]);
 
       // Create divider line (dark gray, semi-transparent)
@@ -533,10 +534,10 @@ app.post('/upload-design', async (req, res) => {
       const line2Top  = y;                              y += lineH    + gap;
       const moonTop   = y;
 
-      // Composite onto transparent canvas
+      // Composite onto WHITE background (required for DTG printing)
       const composite = await sharp({
-        create: { width: canvasW, height: canvasH, channels: 4,
-                  background: { r:0, g:0, b:0, alpha:0 } }
+        create: { width: canvasW, height: canvasH, channels: 3,
+                  background: { r: 255, g: 255, b: 255 } }
       })
       .composite([
         { input: risingResized, top: risingTop, left: rLeft },
