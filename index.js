@@ -480,8 +480,11 @@ app.post('/upload-design', async (req, res) => {
   try {
     const { sun, moon, rising, type } = req.body;
 
-    if (!sun || !moon || !rising || !type) {
-      return res.status(400).json({ success: false, error: 'Missing sun, moon, rising, or type' });
+if (!type) {
+      return res.status(400).json({ success: false, error: 'Missing type' });
+    }
+    if (type === 'trio' && (!sun || !moon || !rising)) {
+      return res.status(400).json({ success: false, error: 'Missing sun, moon, or rising for trio design' });
     }
 
     if (!IMGBB_KEY) {
