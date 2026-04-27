@@ -593,6 +593,9 @@ app.post('/upload-design', async (req, res) => {
 
 // Webhook needs raw body for HMAC verification — must be registered BEFORE express.json()
 // We handle this by reading raw body manually
+// Track recently processed orders to prevent duplicate webhook processing
+const processedOrders = new Set();
+
 app.post('/webhook-order', async (req, res) => {
   try {
     // === Verify webhook is genuinely from Shopify ===
@@ -610,6 +613,16 @@ app.post('/webhook-order', async (req, res) => {
 
     // Order is already parsed by our middleware
     const order = req.body;
+
+    // Deduplicate — ignore if we've already processed this order recently
+    const orderKey = String(order.id);
+    if (processedOrders.has(orderKey)) {
+      console.log('[WEBHOOK] Duplicate webhook for order ' + order.order_number + ' — skipping');
+      return res.status(200).json({ received: true, duplicate: true });
+    }
+    processedOrders.add(orderKey);
+    // Clear from set after 10 minutes to allow reprocessing if needed
+    setTimeout(() => processedOrders.delete(orderKey), 600000);
     console.log(`[WEBHOOK] Order received: #${order.order_number} (${order.id})`);
 
     // Process each line item
@@ -635,13 +648,13 @@ app.post('/webhook-order', async (req, res) => {
       console.log(`[WEBHOOK] Design URL: ${designUrl}`);
 
       // Printful auto-receives order from Shopify app connection
-      // We need to find the Printful order and update the print file using V2 API
-      // Strategy: wait for order, then use PATCH /v2/orders/{id} to update design
+      // We need to find the Printful order and update the print file, then confirm
       console.log('[WEBHOOK] Finding Printful order for Shopify order ' + order.id + '...');
 
       try {
-        // Wait 8 seconds for Printful to create the order from Shopify
-        await new Promise(resolve => setTimeout(resolve, 8000));
+        // Wait 30 seconds for Printful to create the order AND keep it in draft
+        // (requires "Require approval" to be ON in Printful store settings)
+        await new Promise(resolve => setTimeout(resolve, 30000));
 
         // Search for the Printful order - try multiple approaches
         let printfulOrderId = null;
@@ -733,6 +746,20 @@ app.post('/webhook-order', async (req, res) => {
 
         if (updateRes.data?.result) {
           console.log('[WEBHOOK] Print file updated successfully on order ' + printfulOrderId);
+
+          // Auto-confirm the order so it proceeds to fulfillment
+          try {
+            const confirmRes = await axios.post(
+              'https://api.printful.com/orders/' + printfulOrderId + '/confirm',
+              {},
+              { headers: printfulHeaders() }
+            );
+            console.log('[WEBHOOK] Order ' + printfulOrderId + ' confirmed for fulfillment');
+          } catch (confirmErr) {
+            // If auto-confirm fails it's ok — order still has correct design
+            // and can be confirmed manually in Printful dashboard
+            console.warn('[WEBHOOK] Auto-confirm failed (will need manual confirm):', safeError(confirmErr).status);
+          }
         } else {
           console.warn('[WEBHOOK] Unexpected update response:', JSON.stringify(updateRes.data));
           console.warn('[WEBHOOK] Design URL for manual update: ' + designUrl);
