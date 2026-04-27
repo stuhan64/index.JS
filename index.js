@@ -634,83 +634,113 @@ app.post('/webhook-order', async (req, res) => {
       console.log(`[WEBHOOK] Processing item: ${item.title} | design=${designType} | sun=${sunSign} moon=${moonSign} rising=${risingSign}`);
       console.log(`[WEBHOOK] Design URL: ${designUrl}`);
 
-      // Printful already receives the order automatically via Shopify app connection
-      // We just need to find the Printful order and update the print file
-      // Printful uses the Shopify order ID as external_id
-      console.log(`[WEBHOOK] Finding Printful order for Shopify order ${order.id}...`);
+      // Printful auto-receives order from Shopify app connection
+      // We need to find the Printful order and update the print file using V2 API
+      // Strategy: wait for order, then use PATCH /v2/orders/{id} to update design
+      console.log('[WEBHOOK] Finding Printful order for Shopify order ' + order.id + '...');
 
       try {
-        // Wait a few seconds for Printful to create the order from Shopify
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        // Wait 8 seconds for Printful to create the order from Shopify
+        await new Promise(resolve => setTimeout(resolve, 8000));
 
-        // Find the Printful order by Shopify order ID
-        const searchRes = await axios.get(
-          'https://api.printful.com/orders?external_id=' + order.id,
-          { headers: printfulHeaders() }
-        );
+        // Search for the Printful order - try multiple approaches
+        let printfulOrderId = null;
+        let printfulOrderItems = [];
 
-        const printfulOrders = searchRes.data?.result || [];
-        console.log(`[WEBHOOK] Found ${printfulOrders.length} Printful order(s) for Shopify order ${order.id}`);
+        // Try 1: search by external_id (Shopify order ID)
+        try {
+          const searchRes = await axios.get(
+            'https://api.printful.com/orders?external_id=' + order.id,
+            { headers: printfulHeaders() }
+          );
+          const results = searchRes.data?.result || [];
+          if (results.length > 0) {
+            printfulOrderId = results[0].id;
+            printfulOrderItems = results[0].items || [];
+            console.log('[WEBHOOK] Found by external_id: ' + printfulOrderId);
+          }
+        } catch(e) { console.log('[WEBHOOK] external_id search failed:', e.message); }
 
-        // Try to find by order name/number if external_id search fails
-        let printfulOrder = printfulOrders[0];
-
-        if (!printfulOrder) {
-          // Search recent orders and match by Shopify order number
+        // Try 2: search recent orders if not found
+        if (!printfulOrderId) {
           const recentRes = await axios.get(
-            'https://api.printful.com/orders?limit=10',
+            'https://api.printful.com/orders?limit=20&status=draft',
             { headers: printfulHeaders() }
           );
           const recentOrders = recentRes.data?.result || [];
-          printfulOrder = recentOrders.find(o =>
-            o.external_id === String(order.id) ||
+          const match = recentOrders.find(o =>
+            String(o.external_id) === String(order.id) ||
             o.external_id === order.name
           );
-          if (printfulOrder) {
-            console.log(`[WEBHOOK] Found Printful order by recent search: ${printfulOrder.id}`);
+          if (match) {
+            printfulOrderId = match.id;
+            printfulOrderItems = match.items || [];
+            console.log('[WEBHOOK] Found in recent draft orders: ' + printfulOrderId);
           }
         }
 
-        if (!printfulOrder) {
-          console.warn(`[WEBHOOK] Could not find Printful order for Shopify order ${order.id} — will need manual print file update`);
+        // Try 3: check all recent orders including non-draft
+        if (!printfulOrderId) {
+          const allRecentRes = await axios.get(
+            'https://api.printful.com/orders?limit=10',
+            { headers: printfulHeaders() }
+          );
+          const allRecent = allRecentRes.data?.result || [];
+          console.log('[WEBHOOK] Recent orders:', allRecent.map(o => o.id + '/' + o.external_id).join(', '));
+          const match = allRecent.find(o =>
+            String(o.external_id) === String(order.id) ||
+            o.external_id === order.name
+          );
+          if (match) {
+            printfulOrderId = match.id;
+            printfulOrderItems = match.items || [];
+            console.log('[WEBHOOK] Found in recent all orders: ' + printfulOrderId);
+          }
+        }
+
+        if (!printfulOrderId) {
+          console.warn('[WEBHOOK] Could not find Printful order for Shopify order ' + order.id);
+          console.warn('[WEBHOOK] Design URL for manual update: ' + designUrl);
           continue;
         }
 
-        const pfOrderId = printfulOrder.id;
-        console.log(`[WEBHOOK] Updating print file on Printful order ${pfOrderId}`);
+        // Use V1 PUT /orders/{id} to update the print file
+        // First get full order details
+        const orderDetailRes = await axios.get(
+          'https://api.printful.com/orders/' + printfulOrderId,
+          { headers: printfulHeaders() }
+        );
+        const pfOrder = orderDetailRes.data?.result;
+        const pfItems = pfOrder?.items || printfulOrderItems;
 
-        // Update the print file on the Printful order item
-        // Find the matching item in the Printful order
-        const pfItems = printfulOrder.items || [];
-        for (const pfItem of pfItems) {
-          try {
-            const updateRes = await axios.post(
-              'https://api.printful.com/orders/' + pfOrderId + '/items/' + pfItem.id,
-              {
-                files: [{ type: 'front', url: designUrl }]
-              },
-              { headers: printfulHeaders() }
-            );
-            console.log(`[WEBHOOK] Print file updated on Printful order ${pfOrderId}, item ${pfItem.id}`);
-          } catch (itemErr) {
-            // If item update fails, try updating the whole order
-            console.warn(`[WEBHOOK] Item update failed, trying order-level update:`, JSON.stringify(safeError(itemErr)));
-            const orderUpdateRes = await axios.put(
-              'https://api.printful.com/orders/' + pfOrderId,
-              {
-                items: pfItems.map(i => ({
-                  id:    i.id,
-                  files: i.id === pfItem.id ? [{ type: 'front', url: designUrl }] : i.files
-                }))
-              },
-              { headers: printfulHeaders() }
-            );
-            console.log(`[WEBHOOK] Order-level update response:`, orderUpdateRes.data?.code);
-          }
+        console.log('[WEBHOOK] Updating ' + pfItems.length + ' item(s) on Printful order ' + printfulOrderId);
+
+        // Build updated items array with our design URL
+        const updatedItems = pfItems.map(pfItem => ({
+          id:    pfItem.id,
+          files: [{ type: 'front', url: designUrl }]
+        }));
+
+        // PUT to update the order
+        const updateRes = await axios.put(
+          'https://api.printful.com/orders/' + printfulOrderId,
+          { items: updatedItems },
+          { headers: printfulHeaders() }
+        );
+
+        const updateCode = updateRes.data?.code || updateRes.status;
+        console.log('[WEBHOOK] Order update response code:', updateCode);
+
+        if (updateRes.data?.result) {
+          console.log('[WEBHOOK] Print file updated successfully on order ' + printfulOrderId);
+        } else {
+          console.warn('[WEBHOOK] Unexpected update response:', JSON.stringify(updateRes.data));
+          console.warn('[WEBHOOK] Design URL for manual update: ' + designUrl);
         }
 
       } catch (printfulErr) {
-        console.error(`[WEBHOOK] Printful update error for item ${item.id}:`, JSON.stringify(safeError(printfulErr)));
+        console.error('[WEBHOOK] Printful update error:', JSON.stringify(safeError(printfulErr)));
+        console.error('[WEBHOOK] Design URL for manual update: ' + designUrl);
       }
     }
 
