@@ -480,7 +480,7 @@ app.post('/upload-design', async (req, res) => {
   try {
     const { sun, moon, rising, type } = req.body;
 
-if (!type) {
+    if (!type) {
       return res.status(400).json({ success: false, error: 'Missing type' });
     }
     if (type === 'trio' && (!sun || !moon || !rising)) {
@@ -504,14 +504,17 @@ if (!type) {
       ]);
 
       // Size constants - Sun dominant, Rising/Moon at 43%
-      // 2400px wide for high quality DTG print (300 DPI at 8 inches)
+      // High quality DTG print
       const sunSize    = 900;
       const smallSize  = 390;
       const lineW      = sunSize;
-      const lineH      = 6;
-      const gap        = 36;
+      const lineH      = 18;   // Bold lines for print
+      const gapA       = 8;
+      const gapB       = 8;
+      const gapC       = 8;
+      const gapD       = 8;
       const canvasW    = sunSize + 80;
-      const canvasH    = smallSize + gap + lineH + gap + sunSize + gap + lineH + gap + smallSize + 40;
+      const canvasH    = 20 + smallSize + gapA + lineH + gapB + sunSize + gapC + lineH + gapD + smallSize + 40;
 
       // Resize images — keep transparent backgrounds for proper compositing
       const [risingResized, sunResized, moonResized] = await Promise.all([
@@ -520,21 +523,21 @@ if (!type) {
         sharp(moonBuf).resize(smallSize, smallSize, { fit: 'contain', background: { r:255,g:255,b:255,alpha:0 } }).png().toBuffer()
       ]);
 
-      // Create divider line (dark gray, semi-transparent)
+      // Create divider line - bold and dark
       const lineBuf = await sharp({
         create: { width: lineW, height: lineH, channels: 4,
-                  background: { r: 60, g: 60, b: 60, alpha: 180 } }
+                  background: { r: 40, g: 40, b: 40, alpha: 220 } }
       }).png().toBuffer();
 
-      // Calculate vertical positions
-      const cx       = Math.floor((canvasW - sunSize) / 2);
-      const rLeft    = Math.floor((canvasW - smallSize) / 2);
-      let y = 10;
+      // Calculate vertical positions - tight spacing, bold lines
+      const cx    = Math.floor((canvasW - sunSize) / 2);
+      const rLeft = Math.floor((canvasW - smallSize) / 2);
+      let y = 20;
 
-      const risingTop = y;                              y += smallSize + gap;
-      const line1Top  = y;                              y += lineH    + gap;
-      const sunTop    = y;                              y += sunSize  + gap;
-      const line2Top  = y;                              y += lineH    + gap;
+      const risingTop = y;  y += smallSize + gapA;
+      const line1Top  = y;  y += lineH     + gapB;
+      const sunTop    = y;  y += sunSize   + gapC;
+      const line2Top  = y;  y += lineH     + gapD;
       const moonTop   = y;
 
       // Composite onto WHITE background (required for DTG printing)
