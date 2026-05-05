@@ -509,10 +509,10 @@ app.post('/upload-design', async (req, res) => {
       const smallSize  = 280;
       const lineW      = sunSize;
       const lineH      = 18;   // Bold lines for print
-      const gapA       = 8;
-      const gapB       = 8;
-      const gapC       = 8;
-      const gapD       = 8;
+const gapA  = 3;   // Rising to line 1
+const gapB  = 2;   // line 1 to Sun
+const gapC  = 2;   // Sun to line 2
+const gapD  = 3;   // line 2 to Moon
       const canvasW    = sunSize + 80;
       const canvasH    = 20 + smallSize + gapA + lineH + gapB + sunSize + gapC + lineH + gapD + smallSize + 40;
 
