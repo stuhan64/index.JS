@@ -505,8 +505,8 @@ app.post('/upload-design', async (req, res) => {
 
       // Size constants - Sun dominant, Rising/Moon at 43%
       // High quality DTG print
-      const sunSize    = 900;
-      const smallSize  = 390;
+      const sunSize    = 650;
+      const smallSize  = 280;
       const lineW      = sunSize;
       const lineH      = 18;   // Bold lines for print
       const gapA       = 8;
@@ -592,7 +592,17 @@ app.post('/upload-design', async (req, res) => {
       console.log('[UPLOAD] Re-hosting wheel image from AstroApp to Cloudinary...');
 
       const imgRes = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 20000 });
-      const imgBuf = Buffer.from(imgRes.data);
+      const imgBufRaw = Buffer.from(imgRes.data);
+
+      // Resize wheel to 65% of original (35% smaller) for better shirt proportion
+      const imgMeta  = await sharp(imgBufRaw).metadata();
+      const newWidth = Math.round(imgMeta.width  * 0.65);
+      const newHeight = Math.round(imgMeta.height * 0.65);
+      const imgBuf   = await sharp(imgBufRaw)
+        .resize(newWidth, newHeight, { fit: 'cover' })
+        .png()
+        .toBuffer();
+      console.log(`[UPLOAD] Wheel resized: ${imgMeta.width}x${imgMeta.height} -> ${newWidth}x${newHeight}`);
 
       const form = new FormData();
       form.append('file',          'data:image/png;base64,' + imgBuf.toString('base64'));
