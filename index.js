@@ -338,9 +338,24 @@ app.post('/', async (req, res) => {
           version:       1
         }
       },
-      calcRequestProps: { needImage: "Y", needAspects: "Y" },
-      params:           { objects: [0, 1, 24] },
-      styleID:          26
+      calcRequestProps: {
+        needImage:  "Y",
+        needAspects: "Y",
+        styleID:    26
+      },
+      params: {
+        objects: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 15, 24, 10443],
+        aspects: [
+          { angle: 0,   orb: 10 },
+          { angle: 45,  orb: 1  },
+          { angle: 60,  orb: 5  },
+          { angle: 90,  orb: 8  },
+          { angle: 120, orb: 9  },
+          { angle: 135, orb: 2  },
+          { angle: 150, orb: 3  },
+          { angle: 180, orb: 10 }
+        ]
+      }
     };
 
     const data = await getChart(payload);
