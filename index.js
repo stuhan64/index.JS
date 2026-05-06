@@ -339,7 +339,7 @@ app.post('/', async (req, res) => {
         }
       },
       calcRequestProps: { needImage: "Y", needAspects: "Y" },
-      params: { objects: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 24] } // all major planets + rising
+      params: { objects: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 24] }
     };
 
     const data = await getChart(payload);
@@ -357,19 +357,10 @@ app.post('/', async (req, res) => {
 
     console.log(`[CHART] Image: ${imageUrl}`);
     console.log(`[CHART] Sun: ${sunSign} | Moon: ${moonSign} | Rising: ${risingSign}`);
-    console.log(`[CHART] Objects returned: ${objects.length}`);
     console.log(`[CHART] Response keys: ${Object.keys(data).join(', ')}`);
     if (data.chartData) console.log(`[CHART] chartData keys: ${Object.keys(data.chartData).join(', ')}`);
-    const aspectData = data.aspects || data.chartData?.aspects || data.aspectsData || null;
-    if (aspectData) {
-      console.log(`[CHART] Aspects: ${JSON.stringify(aspectData).substring(0, 800)}`);
-    } else {
-      console.log(`[CHART] No aspects found in response`);
-    }
-    // Log first 2 planet objects to verify all planets returned
-    if (objects.length > 3) {
-      console.log(`[CHART] Planet sample: ${JSON.stringify(objects.slice(0,4))}`);
-    }
+    if (data.imgmap) console.log(`[CHART] imgmap: ${JSON.stringify(data.imgmap).substring(0, 300)}`);
+    if (data.objects?.length > 0) console.log(`[CHART] objects sample: ${JSON.stringify(data.objects.slice(0,3))}`);
 
     return res.json({
       success: true,
