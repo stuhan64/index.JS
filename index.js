@@ -339,7 +339,7 @@ app.post('/', async (req, res) => {
         }
       },
       calcRequestProps: { needImage: "Y", needAspects: "Y" },
-      params: { objects: [0, 1, 24] }
+      params: { objects: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 24], styleID: 26 }
     };
 
     const data = await getChart(payload);
