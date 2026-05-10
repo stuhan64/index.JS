@@ -550,7 +550,7 @@ app.post('/upload-design', async (req, res) => {
       const gapC       = 8;
       const gapD       = 8;
       const canvasW    = sunSize + 80;
-      const canvasH    = 20 + smallSize + gapA + lineH + gapB + sunSize + gapC + lineH + gapD + smallSize + 40;
+      const canvasH    = Math.round(canvasW / 0.78);
 
       // Resize images — keep transparent backgrounds for proper compositing
       const [risingResized, sunResized, moonResized] = await Promise.all([
