@@ -4,7 +4,10 @@
 //    Printful requires width/height ratio = 0.78. Since contentH is always taller than wide,
 //    we widen the canvas to meet the ratio rather than cropping content.
 // 2. All four gaps (gapA-D) are set to 2px intentionally for tight trio spacing.
-// 3. rising and moon images use .trim() before resize to strip transparent padding from source images.
+// 3. rising and moon images use .trim() then fit:'contain' to strip transparent padding
+//    while keeping the glyph centered within the resized box.
+// 4. Trio print position is width:1259, height:1620 — keeps resolution at "good" in Printful.
+//    Do not increase beyond 8.39x10.80 inches (at 150 DPI) or quality warning returns.
 
 const express  = require('express');
 const axios    = require('axios');
@@ -503,11 +506,12 @@ app.post('/upload-design', async (req, res) => {
       const canvasH  = contentH;
       const canvasW  = Math.max(sunSize + 80, Math.round(contentH * 0.78));
 
-      // Trim transparent padding from rising/moon so glyph fills the full box
+      // .trim() strips transparent border, fit:'contain' re-centers glyph in the full box
+      // Using 'contain' (not 'inside') is essential for correct centering after trim
       const [risingResized, sunResized, moonResized] = await Promise.all([
-        sharp(risingBuf).trim().resize(smallSize, smallSize, { fit: 'inside', background: { r:255,g:255,b:255,alpha:0 } }).png().toBuffer(),
+        sharp(risingBuf).trim().resize(smallSize, smallSize, { fit: 'contain', background: { r:255,g:255,b:255,alpha:0 } }).png().toBuffer(),
         sharp(sunBuf).resize(sunSize, sunSize, { fit: 'contain', background: { r:255,g:255,b:255,alpha:0 } }).png().toBuffer(),
-        sharp(moonBuf).trim().resize(smallSize, smallSize, { fit: 'inside', background: { r:255,g:255,b:255,alpha:0 } }).png().toBuffer()
+        sharp(moonBuf).trim().resize(smallSize, smallSize, { fit: 'contain', background: { r:255,g:255,b:255,alpha:0 } }).png().toBuffer()
       ]);
 
       const lineBuf = await sharp({
@@ -735,8 +739,10 @@ app.post('/webhook-order', async (req, res) => {
           position: {
             area_width:  1800,
             area_height: 2400,
-            width:       isWheel ? 1100 : 1400,
-            height:      isWheel ? 1100 : 1800,
+            // Trio sized to 8.39x10.80in @ 150 DPI = "good" quality in Printful
+            // Do not increase beyond these values or resolution warning returns
+            width:       isWheel ? 1100 : 1259,
+            height:      isWheel ? 1100 : 1620,
             top:         isWheel ? wheelTop : 200,
             left:        isWheel ? 350 : 200
           }
