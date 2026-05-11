@@ -1,4 +1,10 @@
 // index.js — AstroApp + Printful + Shopify Backend (v6)
+// IMPORTANT NOTES FOR FUTURE EDITS:
+// 1. canvasH uses Math.max(contentH, Math.round(canvasW / 0.78)) — do NOT simplify this.
+//    It ensures the trio composite is tall enough AND meets Printful's 0.78 aspect ratio.
+// 2. All four gaps (gapA-D) are set to 2px intentionally for tight trio spacing.
+// 3. rising and moon images use .trim() before resize to strip transparent padding from source images.
+
 const express  = require('express');
 const axios    = require('axios');
 const cors     = require('cors');
@@ -87,11 +93,10 @@ function safeError(err) {
 }
 
 // === TOKEN CACHE ===
-// AstroApp tokens expire after 100 uses OR 60 minutes — whichever comes first
 let cachedToken   = null;
 let tokenExpiry   = 0;
 let tokenUseCount = 0;
-const TOKEN_MAX_USES = 90; // refresh at 90 uses, safely before the 100 limit
+const TOKEN_MAX_USES = 90;
 
 function getCachedToken() {
   if (cachedToken && Date.now() < tokenExpiry - 30000 && tokenUseCount < TOKEN_MAX_USES) {
@@ -142,14 +147,12 @@ async function fetchChart(payload, useBasicAuth) {
     }
   );
 
-  // Check for EXPIRED token response
   if (isExpiredResponse(response.data)) {
     console.warn('[TOKEN] AstroApp returned EXPIRED — clearing token');
     cachedToken = null; tokenExpiry = 0; tokenUseCount = 0;
     throw new Error('TOKEN_EXPIRED');
   }
 
-  // Cache fresh JWT if returned
   const jwt = response.data?.jwt || response.data?.token;
   if (jwt && jwt !== 'EXPIRED') {
     cacheToken(jwt);
@@ -158,7 +161,6 @@ async function fetchChart(payload, useBasicAuth) {
   return response.data;
 }
 
-// Main chart fetch — Bearer token first, auto-retry with Basic Auth on failure or expiry
 async function getChart(payload) {
   const token = getCachedToken();
 
@@ -171,7 +173,6 @@ async function getChart(payload) {
     }
   }
 
-  // Basic Auth — always works, also returns fresh token
   try {
     return await fetchChart(payload, true);
   } catch (err) {
@@ -230,10 +231,9 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// Token test — now tests with a real minimal chart request
+// Token test
 app.get('/token-test', async (_req, res) => {
   try {
-    // Use a known good test payload from AstroApp docs
     const testPayload = {
       chart: {
         chartData: {
@@ -265,7 +265,7 @@ app.get('/token-test', async (_req, res) => {
   }
 });
 
-// Printful variant lookup — uses sync endpoint for Shopify-connected stores
+// Printful variant lookup
 app.get('/printful-variants', async (_req, res) => {
   try {
     const r = await axios.get(
@@ -371,26 +371,6 @@ app.post('/', async (req, res) => {
     const moonSign   = signFromLongitude(moonObj?.lng);
     const risingSign = signFromLongitude(risingObj?.lng);
 
-    // Verify image is actually ready on AstroApp server before returning
-    // imgPath is sometimes returned before the file is written
-    if (imageUrl) {
-      let imgReady = false;
-      for (let attempt = 1; attempt <= 6; attempt++) {
-        try {
-          const check = await axios.head(imageUrl, { timeout: 8000 });
-          if (check.status === 200) {
-            imgReady = true;
-            if (attempt > 1) console.log(`[CHART] Image ready on attempt ${attempt}`);
-            break;
-          }
-        } catch (e) {
-          console.log(`[CHART] Image not ready (attempt ${attempt}/6) — waiting 1.5s...`);
-          await new Promise(r => setTimeout(r, 1500));
-        }
-      }
-      if (!imgReady) console.warn('[CHART] Image never became available after 6 attempts');
-    }
-
     console.log(`[CHART] Image: ${imageUrl}`);
     console.log(`[CHART] Sun: ${sunSign} | Moon: ${moonSign} | Rising: ${risingSign}`);
 
@@ -432,26 +412,16 @@ const VARIANT_MAP = {
 };
 
 function getVariantId(design, fit, size) {
-  const variantId = VARIANT_MAP[design]?.[fit]?.[size];
-  return variantId || null;
+  return VARIANT_MAP[design]?.[fit]?.[size] || null;
 }
 
 // Create Printful order
 app.post('/create-order', async (req, res) => {
   try {
     const {
-      designUrl,
-      design,       // 'wheel' or 'trio'
-      fit,          // 'womens' or 'unisex'
-      size,         // 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'
-      customerName,
-      customerEmail,
-      address1,
-      address2,
-      city,
-      stateCode,
-      countryCode,
-      zip
+      designUrl, design, fit, size,
+      customerName, customerEmail,
+      address1, address2, city, stateCode, countryCode, zip
     } = req.body;
 
     if (!designUrl || !design || !fit || !size || !customerName || !customerEmail || !address1 || !city || !countryCode || !zip) {
@@ -470,37 +440,19 @@ app.post('/create-order', async (req, res) => {
 
     const orderPayload = {
       recipient: {
-        name:         customerName,
-        email:        customerEmail,
-        address1,
-        address2:     address2 || '',
-        city,
-        state_code:   stateCode || '',
-        country_code: countryCode,
-        zip
+        name: customerName, email: customerEmail,
+        address1, address2: address2 || '',
+        city, state_code: stateCode || '', country_code: countryCode, zip
       },
-      items: [
-        {
-          variant_id: variantId,
-          quantity:   1,
-          files: [{ type: 'front', url: designUrl }]
-        }
-      ]
+      items: [{ variant_id: variantId, quantity: 1, files: [{ type: 'front', url: designUrl }] }]
     };
 
-    const r = await axios.post(
-      'https://api.printful.com/orders',
-      orderPayload,
-      { headers: printfulHeaders() }
-    );
+    const r = await axios.post('https://api.printful.com/orders', orderPayload, { headers: printfulHeaders() });
 
     console.log(`[ORDER] ✅ Created: ${r.data?.result?.id}`);
     return res.json({
-      success:   true,
-      orderId:   r.data?.result?.id,
-      status:    r.data?.result?.status,
-      variantId,
-      design, fit, size
+      success: true, orderId: r.data?.result?.id, status: r.data?.result?.status,
+      variantId, design, fit, size
     });
 
   } catch (err) {
@@ -510,62 +462,56 @@ app.post('/create-order', async (req, res) => {
 });
 
 
-// === UPLOAD DESIGN — composites trio signs and uploads to imgbb ===
-// Returns a real hosted URL that Printful can fetch for printing
+// === UPLOAD DESIGN ===
 app.post('/upload-design', async (req, res) => {
   try {
     const { sun, moon, rising, type } = req.body;
 
-    if (!type) {
-      return res.status(400).json({ success: false, error: 'Missing type' });
-    }
+    if (!type) return res.status(400).json({ success: false, error: 'Missing type' });
     if (type === 'trio' && (!sun || !moon || !rising)) {
       return res.status(400).json({ success: false, error: 'Missing sun, moon, or rising for trio design' });
     }
-
-    if (!IMGBB_KEY) {
-      return res.status(500).json({ success: false, error: 'IMGBB_KEY not configured' });
-    }
+    if (!IMGBB_KEY) return res.status(500).json({ success: false, error: 'IMGBB_KEY not configured' });
 
     const CDN = 'https://cdn.shopify.com/s/files/1/0936/4534/0969/files/';
 
     if (type === 'trio') {
       console.log(`[UPLOAD] Compositing trio: rising=${rising}, sun=${sun}, moon=${moon}`);
 
-      // Download all three sign images
       const [risingBuf, sunBuf, moonBuf] = await Promise.all([
         axios.get(CDN + 'rising.' + rising + '.png', { responseType: 'arraybuffer' }).then(r => Buffer.from(r.data)),
         axios.get(CDN + 'sun.'    + sun    + '.png', { responseType: 'arraybuffer' }).then(r => Buffer.from(r.data)),
         axios.get(CDN + 'moon.'   + moon   + '.png', { responseType: 'arraybuffer' }).then(r => Buffer.from(r.data))
       ]);
 
-      // Size constants - Sun dominant, Rising/Moon at 43%
-      // High quality DTG print
-      const sunSize    = 650;
-      const smallSize  = 280;
-      const lineW      = sunSize;
-      const lineH      = 18;   // Bold lines for print
-      const gapA       = 8;
-      const gapB       = 8;
-      const gapC       = 8;
-      const gapD       = 8;
-      const canvasW    = sunSize + 80;
-      const canvasH    = Math.round(canvasW / 0.78);
+      // Size constants — sun dominant, rising/moon smaller
+      const sunSize   = 650;
+      const smallSize = 280;
+      const lineW     = sunSize;
+      const lineH     = 18;
+      const gapA      = 2;   // rising → line 1
+      const gapB      = 2;   // line 1 → sun
+      const gapC      = 2;   // sun → line 2
+      const gapD      = 2;   // line 2 → moon
+      const canvasW   = sunSize + 80;
 
-      // Resize images — keep transparent backgrounds for proper compositing
+      // contentH = full height to fit all elements
+      // canvasH = whichever is larger: full content OR Printful's required 0.78 ratio
+      // DO NOT simplify — both constraints must be satisfied simultaneously
+      const contentH = 20 + smallSize + gapA + lineH + gapB + sunSize + gapC + lineH + gapD + smallSize + 40;
+      const canvasH  = Math.max(contentH, Math.round(canvasW / 0.78));
+
+      // Trim transparent padding from rising/moon so glyph fills the full box
       const [risingResized, sunResized, moonResized] = await Promise.all([
-        sharp(risingBuf).resize(smallSize, smallSize, { fit: 'contain', background: { r:255,g:255,b:255,alpha:0 } }).png().toBuffer(),
+        sharp(risingBuf).trim().resize(smallSize, smallSize, { fit: 'inside', background: { r:255,g:255,b:255,alpha:0 } }).png().toBuffer(),
         sharp(sunBuf).resize(sunSize, sunSize, { fit: 'contain', background: { r:255,g:255,b:255,alpha:0 } }).png().toBuffer(),
-        sharp(moonBuf).resize(smallSize, smallSize, { fit: 'contain', background: { r:255,g:255,b:255,alpha:0 } }).png().toBuffer()
+        sharp(moonBuf).trim().resize(smallSize, smallSize, { fit: 'inside', background: { r:255,g:255,b:255,alpha:0 } }).png().toBuffer()
       ]);
 
-      // Create divider line - bold and dark
       const lineBuf = await sharp({
-        create: { width: lineW, height: lineH, channels: 4,
-                  background: { r: 40, g: 40, b: 40, alpha: 220 } }
+        create: { width: lineW, height: lineH, channels: 4, background: { r: 40, g: 40, b: 40, alpha: 220 } }
       }).png().toBuffer();
 
-      // Calculate vertical positions - tight spacing, bold lines
       const cx    = Math.floor((canvasW - sunSize) / 2);
       const rLeft = Math.floor((canvasW - smallSize) / 2);
       let y = 20;
@@ -576,10 +522,8 @@ app.post('/upload-design', async (req, res) => {
       const line2Top  = y;  y += lineH     + gapD;
       const moonTop   = y;
 
-      // Composite onto WHITE background (required for DTG printing)
       const composite = await sharp({
-        create: { width: canvasW, height: canvasH, channels: 3,
-                  background: { r: 255, g: 255, b: 255 } }
+        create: { width: canvasW, height: canvasH, channels: 3, background: { r: 255, g: 255, b: 255 } }
       })
       .composite([
         { input: risingResized, top: risingTop, left: rLeft },
@@ -591,24 +535,18 @@ app.post('/upload-design', async (req, res) => {
       .png()
       .toBuffer();
 
-      // Upload to Cloudinary
       if (!CLOUDINARY_CLOUD || !CLOUDINARY_KEY || !CLOUDINARY_SECRET) {
         throw new Error('Cloudinary credentials not configured');
       }
 
-      // Use Cloudinary's unsigned upload preset to avoid signature issues
-      // Create an unsigned upload preset in Cloudinary dashboard first
-      const base64Image = composite.toString('base64');
-
       const form = new FormData();
-      form.append('file',           'data:image/png;base64,' + base64Image);
-      form.append('upload_preset',  'zodigear_unsigned');
-      form.append('folder',         'zodigear');
+      form.append('file',          'data:image/png;base64,' + composite.toString('base64'));
+      form.append('upload_preset', 'zodigear_unsigned');
+      form.append('folder',        'zodigear');
 
       const uploadRes = await axios.post(
         'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD + '/image/upload',
-        form,
-        { headers: form.getHeaders(), timeout: 30000 }
+        form, { headers: form.getHeaders(), timeout: 30000 }
       );
 
       const url = uploadRes.data?.secure_url;
@@ -618,26 +556,17 @@ app.post('/upload-design', async (req, res) => {
       return res.json({ success: true, url, type: 'trio' });
 
     } else if (type === 'wheel') {
-      // Wheel: download from AstroApp and re-upload to Cloudinary
-      // AstroApp URLs are temporary and may not be accessible by Printful
       const { imageUrl } = req.body;
-      if (!imageUrl) {
-        return res.status(400).json({ success: false, error: 'Missing imageUrl for wheel upload' });
-      }
+      if (!imageUrl) return res.status(400).json({ success: false, error: 'Missing imageUrl for wheel upload' });
 
       console.log('[UPLOAD] Re-hosting wheel image from AstroApp to Cloudinary...');
 
-      const imgRes = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 20000 });
+      const imgRes    = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 20000 });
       const imgBufRaw = Buffer.from(imgRes.data);
-
-      // Resize wheel to 65% of original (35% smaller) for better shirt proportion
-      const imgMeta  = await sharp(imgBufRaw).metadata();
-      const newWidth = Math.round(imgMeta.width  * 0.65);
+      const imgMeta   = await sharp(imgBufRaw).metadata();
+      const newWidth  = Math.round(imgMeta.width  * 0.65);
       const newHeight = Math.round(imgMeta.height * 0.65);
-      const imgBuf   = await sharp(imgBufRaw)
-        .resize(newWidth, newHeight, { fit: 'cover' })
-        .png()
-        .toBuffer();
+      const imgBuf    = await sharp(imgBufRaw).resize(newWidth, newHeight, { fit: 'cover' }).png().toBuffer();
       console.log(`[UPLOAD] Wheel resized: ${imgMeta.width}x${imgMeta.height} -> ${newWidth}x${newHeight}`);
 
       const form = new FormData();
@@ -647,8 +576,7 @@ app.post('/upload-design', async (req, res) => {
 
       const uploadRes = await axios.post(
         'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD + '/image/upload',
-        form,
-        { headers: form.getHeaders(), timeout: 30000 }
+        form, { headers: form.getHeaders(), timeout: 30000 }
       );
 
       const url = uploadRes.data?.secure_url;
@@ -668,19 +596,14 @@ app.post('/upload-design', async (req, res) => {
 });
 
 
-// === SHOPIFY WEBHOOK — order created/paid ===
-// Shopify sends order data here when payment is confirmed
-// We read the custom design URL from line item properties and submit to Printful
-
-// Webhook needs raw body for HMAC verification — must be registered BEFORE express.json()
-// We handle this by reading raw body manually
-
-// Track recently processed orders to prevent duplicate webhook processing
+// === SHOPIFY WEBHOOK ===
 const processedOrders = new Set();
+
+// Toddler tee Printful variant IDs — wheel sits lower on toddler vs adult
+const TODDLER_VARIANTS = [5293351418, 5293351419, 5293351420, 5293351421];
 
 app.post('/webhook-order', async (req, res) => {
   try {
-    // Verify Shopify HMAC signature
     const hmacHeader = req.headers['x-shopify-hmac-sha256'];
     if (SHOPIFY_WEBHOOK_SECRET && hmacHeader) {
       const hash = crypto
@@ -693,10 +616,9 @@ app.post('/webhook-order', async (req, res) => {
       }
     }
 
-    const order = req.body;
-
-    // Deduplicate
+    const order    = req.body;
     const orderKey = String(order.id);
+
     if (processedOrders.has(orderKey)) {
       console.log('[WEBHOOK] Duplicate for order ' + order.order_number + ' — skipping');
       return res.status(200).json({ received: true, duplicate: true });
@@ -706,8 +628,6 @@ app.post('/webhook-order', async (req, res) => {
 
     console.log('[WEBHOOK] Order received: #' + order.order_number + ' (' + order.id + ')');
 
-    // Build ORDERED array of designs — preserves order to match Printful items positionally
-    // We cannot use variant_id as key because multiple items can have the same variant
     const itemDesigns = [];
     for (const item of order.line_items || []) {
       const props = {};
@@ -731,11 +651,9 @@ app.post('/webhook-order', async (req, res) => {
       return res.status(200).json({ received: true });
     }
 
-    // Wait 30s for Printful to create draft order
     console.log('[WEBHOOK] Waiting 30s for Printful to create draft order...');
     await new Promise(resolve => setTimeout(resolve, 30000));
 
-    // Find Printful order by external_id
     let pfOrderId = null;
     let pfItems   = [];
 
@@ -747,11 +665,7 @@ app.post('/webhook-order', async (req, res) => {
       const results = r.data?.result || [];
       if (results.length > 0) {
         pfOrderId = results[0].id;
-        // Get full order details including items
-        const detail = await axios.get(
-          'https://api.printful.com/orders/' + pfOrderId,
-          { headers: printfulHeaders() }
-        );
+        const detail = await axios.get('https://api.printful.com/orders/' + pfOrderId, { headers: printfulHeaders() });
         pfItems = detail.data?.result?.items || results[0].items || [];
         console.log('[WEBHOOK] Found Printful order ' + pfOrderId + ' with ' + pfItems.length + ' items');
       }
@@ -759,23 +673,15 @@ app.post('/webhook-order', async (req, res) => {
       console.warn('[WEBHOOK] Search failed:', e.message);
     }
 
-    // Try recent orders if not found
     if (!pfOrderId) {
       try {
-        const r = await axios.get(
-          'https://api.printful.com/orders?limit=20',
-          { headers: printfulHeaders() }
-        );
+        const r = await axios.get('https://api.printful.com/orders?limit=20', { headers: printfulHeaders() });
         const match = (r.data?.result || []).find(o =>
-          String(o.external_id) === String(order.id) ||
-          o.external_id === order.name
+          String(o.external_id) === String(order.id) || o.external_id === order.name
         );
         if (match) {
           pfOrderId = match.id;
-          const detail = await axios.get(
-            'https://api.printful.com/orders/' + pfOrderId,
-            { headers: printfulHeaders() }
-          );
+          const detail = await axios.get('https://api.printful.com/orders/' + pfOrderId, { headers: printfulHeaders() });
           pfItems = detail.data?.result?.items || match.items || [];
           console.log('[WEBHOOK] Found in recent: ' + pfOrderId + ' with ' + pfItems.length + ' items');
         }
@@ -786,25 +692,20 @@ app.post('/webhook-order', async (req, res) => {
 
     if (!pfOrderId) {
       console.warn('[WEBHOOK] Could not find Printful order for Shopify order ' + order.id);
-      for (const [vid, d] of Object.entries(itemDesigns)) {
-        console.warn('[WEBHOOK] Manual update needed — variant=' + vid + ' url=' + d.designUrl);
+      for (const d of itemDesigns) {
+        console.warn('[WEBHOOK] Manual update needed — variant=' + d.variantId + ' url=' + d.designUrl);
       }
       return res.status(200).json({ received: true });
     }
 
-    // Match Printful items to designs positionally
-    // Sort both arrays by variant ID to align them, then match by position
-    // This handles duplicate variants (two people ordering same size)
     console.log('[WEBHOOK] Matching ' + pfItems.length + ' Printful items to ' + itemDesigns.length + ' designs...');
 
-    // Sort Printful items by their sync_variant_id for consistent ordering
     const sortedPfItems = [...pfItems].sort((a, b) => {
       const va = a.sync_variant_id || a.variant_id || 0;
       const vb = b.sync_variant_id || b.variant_id || 0;
       return String(va).localeCompare(String(vb));
     });
 
-    // Sort Shopify designs by Printful variant ID for same ordering
     const sortedDesigns = [...itemDesigns].sort((a, b) => {
       const va = shopifyToPrintfulVariant(a.variantId) || 0;
       const vb = shopifyToPrintfulVariant(b.variantId) || 0;
@@ -812,27 +713,31 @@ app.post('/webhook-order', async (req, res) => {
     });
 
     const updatedItems = sortedPfItems.map((pfItem, index) => {
-      const design = sortedDesigns[index] || sortedDesigns[0];
+      const design    = sortedDesigns[index] || sortedDesigns[0];
+      const isWheel   = design.designType === 'wheel';
+      const pfVarId   = pfItem.sync_variant_id || pfItem.variant_id;
+      const isToddler = TODDLER_VARIANTS.includes(Number(pfVarId));
+      const wheelTop  = isToddler ? 350 : 200;
+
       console.log('[WEBHOOK] Matched Printful item ' + pfItem.id + ' -> ' + design.designType + ' (' + design.sunSign + '/' + design.moonSign + '/' + design.risingSign + ')');
-      const isWheel = design.designType === 'wheel';
+
       return {
         id: pfItem.id,
         files: [{
-          type:     'front',
-          url:      design.designUrl,
+          type: 'front',
+          url:  design.designUrl,
           position: {
-            area_width:   1800,
-            area_height:  2400,
-            width:        isWheel ? 1100 : 1400,   // wheel smaller, trio full width
-            height:       isWheel ? 1100 : 1800,   // wheel square, trio taller
-            top:          isWheel ?  200 :  200,
-            left:         isWheel ?  350 :  200
+            area_width:  1800,
+            area_height: 2400,
+            width:       isWheel ? 1100 : 1400,
+            height:      isWheel ? 1100 : 1800,
+            top:         isWheel ? wheelTop : 200,
+            left:        isWheel ? 350 : 200
           }
         }]
       };
     });
 
-    // Update all items in one PUT call
     try {
       const updateRes = await axios.put(
         'https://api.printful.com/orders/' + pfOrderId,
@@ -842,13 +747,10 @@ app.post('/webhook-order', async (req, res) => {
 
       if (updateRes.data?.result) {
         console.log('[WEBHOOK] All print files updated on order ' + pfOrderId);
-
-        // Auto-confirm
         try {
           await axios.post(
             'https://api.printful.com/orders/' + pfOrderId + '/confirm',
-            {},
-            { headers: printfulHeaders() }
+            {}, { headers: printfulHeaders() }
           );
           console.log('[WEBHOOK] Order ' + pfOrderId + ' confirmed for fulfillment');
         } catch (ce) {
@@ -907,11 +809,11 @@ function shopifyToPrintfulVariant(shopifyVariantId) {
     "50591044829481": 4873605216,
     "50591044862249": 4873605217,
     "50591044895017": 4873605218,
-    // Baby Jersey Bodysuit (both trio and wheel use same product)
+    // Baby Jersey Bodysuit
     "53080458166569": 5288660098,  // 12M
     "53080458199337": 5288660099,  // 18M
     "53080458232105": 5288660100,  // 24M
-    // Toddler Jersey T-Shirt (both trio and wheel use same product)
+    // Toddler Jersey T-Shirt
     "53097308881193": 5293351418,  // 2T
     "53097308913961": 5293351419,  // 3T
     "53097308946729": 5293351420,  // 4T
