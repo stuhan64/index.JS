@@ -494,7 +494,7 @@ app.post('/upload-design', async (req, res) => {
       const sunSize   = 650;
       const smallSize = 190;  // Reduced from 280 — keeps rising/moon subordinate after .trim()
       const lineW     = sunSize;
-      const lineH     = 9;    // Thin line — half of original 18px
+      const lineH     = 6;    // Thin line — half of original 18px
       const gapA      = 8;    // rising → line 1 (breathing room)
       const gapB      = 2;    // line 1 → sun (tight)
       const gapC      = 2;    // sun → line 2 (tight)
@@ -516,7 +516,7 @@ app.post('/upload-design', async (req, res) => {
         sharp(moonBuf).trim().resize(smallSize, smallSize, { fit: 'contain', background: { r:255,g:255,b:255,alpha:0 } }).png().toBuffer()
       ]);
 
-      // Line color: #a09fa0 (r:160, g:159, b:160)
+      // Line color: #EDEDED (r:160, g:159, b:160)
       const lineBuf = await sharp({
         create: { width: lineW, height: lineH, channels: 4, background: { r: 160, g: 159, b: 160, alpha: 220 } }
       }).png().toBuffer();
