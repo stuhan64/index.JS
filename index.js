@@ -1,13 +1,13 @@
-// index.js — AstroApp + Printful + Shopify Backend (v6)
+// index.js — AstroApp + Printful + Shopify Backend (v7 — line-free trio)
 // IMPORTANT NOTES FOR FUTURE EDITS:
-// 1. canvasW uses Math.max(sunSize + 80, Math.round(contentH * 0.78)) — do NOT simplify this.
-//    Printful requires width/height ratio = 0.78. Since contentH is always taller than wide,
+// 1. The trio design intentionally has NO horizontal divider lines.
+// 2. canvasW uses Math.max(sunSize + 80, Math.round(contentH * 0.78)) — do NOT simplify this.
+//    Printful requires width/height ratio = 0.78. Since contentH is taller than wide,
 //    we widen the canvas to meet the ratio rather than cropping content.
-// 2. gapA and gapD are 8px (breathing room around lines), gapB and gapC are 2px (sun stays tight).
-// 3. lineH is 9px and color is #a09fa0 (r:160, g:159, b:160).
-// 4. rising and moon images use .trim() then fit:'contain' to strip transparent padding
+// 3. rising and moon images use .trim() then fit:'contain' to strip transparent padding
 //    while keeping the glyph centered within the resized box.
-// 5. smallSize is 190px — keeps rising/moon clearly subordinate to the 650px sun after trim.
+// 4. smallSize is 190px — keeps rising/moon clearly subordinate to the 650px sun after trim.
+// 5. symbolGap is 42px, providing separation where the divider lines previously appeared.
 // 6. Trio print position is width:1259, height:1620 — keeps resolution at "good" in Printful.
 //    Do not increase beyond 8.39x10.80 inches (at 150 DPI) or quality warning returns.
 
@@ -492,19 +492,16 @@ app.post('/upload-design', async (req, res) => {
 
       // Size constants — sun dominant, rising/moon clearly smaller
       const sunSize   = 650;
-      const smallSize = 190;  // Reduced from 280 — keeps rising/moon subordinate after .trim()
-      const lineW     = sunSize;
-      const lineH     = 6;    // Thin line — half of original 18px
-      const gapA      = 8;    // rising → line 1 (breathing room)
-      const gapB      = 2;    // line 1 → sun (tight)
-      const gapC      = 2;    // sun → line 2 (tight)
-      const gapD      = 8;    // line 2 → moon (breathing room)
+      const smallSize = 190;  // Keeps rising/moon subordinate after .trim()
+      const symbolGap = 42;   // Open space between symbols; no divider lines
+      const topPad    = 20;
+      const bottomPad = 40;
 
-      // contentH = full height needed to fit all elements
+      // contentH = full height needed to fit all three symbols and spacing
       // canvasW must be wide enough to satisfy Printful's 0.78 width/height ratio
       // We widen the canvas rather than crop content — extra width appears as white margins
       // DO NOT simplify — both constraints must be satisfied simultaneously
-      const contentH = 20 + smallSize + gapA + lineH + gapB + sunSize + gapC + lineH + gapD + smallSize + 40;
+      const contentH = topPad + smallSize + symbolGap + sunSize + symbolGap + smallSize + bottomPad;
       const canvasH  = contentH;
       const canvasW  = Math.max(sunSize + 80, Math.round(contentH * 0.78));
 
@@ -516,21 +513,13 @@ app.post('/upload-design', async (req, res) => {
         sharp(moonBuf).trim().resize(smallSize, smallSize, { fit: 'contain', background: { r:255,g:255,b:255,alpha:0 } }).png().toBuffer()
       ]);
 
-      // Line color: #EDEDED (r:160, g:159, b:160)
-      const lineBuf = await sharp({
-        create: { width: lineW, height: lineH, channels: 4, background: { r: 160, g: 159, b: 160, alpha: 220 } }
-      }).png().toBuffer();
-
       // Center everything horizontally on the wider canvas
       const cx    = Math.floor((canvasW - sunSize) / 2);
       const rLeft = Math.floor((canvasW - smallSize) / 2);
-      const lLeft = Math.floor((canvasW - lineW) / 2);
-      let y = 20;
+      let y = topPad;
 
-      const risingTop = y;  y += smallSize + gapA;
-      const line1Top  = y;  y += lineH     + gapB;
-      const sunTop    = y;  y += sunSize   + gapC;
-      const line2Top  = y;  y += lineH     + gapD;
+      const risingTop = y;  y += smallSize + symbolGap;
+      const sunTop    = y;  y += sunSize   + symbolGap;
       const moonTop   = y;
 
       console.log(`[UPLOAD] Canvas: ${canvasW}x${canvasH} (ratio: ${(canvasW/canvasH).toFixed(3)})`);
@@ -540,9 +529,7 @@ app.post('/upload-design', async (req, res) => {
       })
       .composite([
         { input: risingResized, top: risingTop, left: rLeft },
-        { input: lineBuf,       top: line1Top,  left: lLeft },
         { input: sunResized,    top: sunTop,    left: cx },
-        { input: lineBuf,       top: line2Top,  left: lLeft },
         { input: moonResized,   top: moonTop,   left: rLeft }
       ])
       .png()
