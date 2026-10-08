@@ -555,7 +555,77 @@ app.post('/upload-design', async (req, res) => {
       console.log('[UPLOAD] Trio uploaded to Cloudinary:', url);
       return res.json({ success: true, url, type: 'trio' });
 
-    } else if (type === 'wheel') {
+   } else if (type === 'trio-black') {
+  console.log(`[UPLOAD] Compositing BLACK trio: rising=${rising}, sun=${sun}, moon=${moon}`);
+
+  const [risingBuf, sunBuf, moonBuf] = await Promise.all([
+    axios.get(CDN + 'rising-black.' + rising + '.png', { responseType: 'arraybuffer' }).then(r => Buffer.from(r.data)),
+    axios.get(CDN + 'sun.'          + sun    + '.png', { responseType: 'arraybuffer' }).then(r => Buffer.from(r.data)),
+    axios.get(CDN + 'moon-black.'   + moon   + '.png', { responseType: 'arraybuffer' }).then(r => Buffer.from(r.data))
+  ]);
+
+  // Same size constants as the white trio — sun dominant, rising/moon subordinate.
+  // Canvas keeps the 0.78 width/height ratio Printful requires.
+  const sunSize   = 650;
+  const smallSize = 190;
+  const symbolGap = 42;
+  const topPad    = 20;
+  const bottomPad = 40;
+
+  const contentH = topPad + smallSize + symbolGap + sunSize + symbolGap + smallSize + bottomPad;
+  const canvasH  = contentH;
+  const canvasW  = Math.max(sunSize + 80, Math.round(contentH * 0.78));
+
+  const [risingResized, sunResized, moonResized] = await Promise.all([
+    sharp(risingBuf).trim().resize(smallSize, smallSize, { fit: 'contain', background: { r:0,g:0,b:0,alpha:0 } }).png().toBuffer(),
+    sharp(sunBuf).resize(sunSize, sunSize, { fit: 'contain', background: { r:0,g:0,b:0,alpha:0 } }).png().toBuffer(),
+    sharp(moonBuf).trim().resize(smallSize, smallSize, { fit: 'contain', background: { r:0,g:0,b:0,alpha:0 } }).png().toBuffer()
+  ]);
+
+  const cx    = Math.floor((canvasW - sunSize) / 2);
+  const rLeft = Math.floor((canvasW - smallSize) / 2);
+  let y = topPad;
+
+  const risingTop = y;  y += smallSize + symbolGap;
+  const sunTop    = y;  y += sunSize   + symbolGap;
+  const moonTop   = y;
+
+  console.log(`[UPLOAD] Black canvas: ${canvasW}x${canvasH} (ratio: ${(canvasW/canvasH).toFixed(3)})`);
+
+  // NOTE: composited onto BLACK (not transparent) to mirror the white trio's
+  // flattened output. Only use the resulting file on black garments.
+  const composite = await sharp({
+    create: { width: canvasW, height: canvasH, channels: 3, background: { r: 0, g: 0, b: 0 } }
+  })
+  .composite([
+    { input: risingResized, top: risingTop, left: rLeft },
+    { input: sunResized,    top: sunTop,    left: cx },
+    { input: moonResized,   top: moonTop,   left: rLeft }
+  ])
+  .png()
+  .toBuffer();
+
+  if (!CLOUDINARY_CLOUD || !CLOUDINARY_KEY || !CLOUDINARY_SECRET) {
+    throw new Error('Cloudinary credentials not configured');
+  }
+
+  const form = new FormData();
+  form.append('file',          'data:image/png;base64,' + composite.toString('base64'));
+  form.append('upload_preset', 'zodigear_unsigned');
+  form.append('folder',        'zodigear');
+
+  const uploadRes = await axios.post(
+    'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD + '/image/upload',
+    form, { headers: form.getHeaders(), timeout: 30000 }
+  );
+
+  const url = uploadRes.data?.secure_url;
+  if (!url) throw new Error('Cloudinary black-trio upload failed: ' + JSON.stringify(uploadRes.data));
+
+  console.log('[UPLOAD] Black trio uploaded to Cloudinary:', url);
+  return res.json({ success: true, url, type: 'trio-black' });
+      }
+    else if (type === 'wheel') {
       const { imageUrl } = req.body;
       if (!imageUrl) return res.status(400).json({ success: false, error: 'Missing imageUrl for wheel upload' });
 
