@@ -450,7 +450,7 @@ app.post('/create-order', async (req, res) => {
         address1, address2: address2 || '',
         city, state_code: stateCode || '', country_code: countryCode, zip
       },
-      items: [{ variant_id: variantId, quantity: 1, files: [{ type: 'front', url: designUrl }] }]
+      items: [{ variant_id: variantId, quantity: 1, files: [{ type: printfulFileType(variantId), url: designUrl }] }]
     };
 
     const r = await axios.post('https://api.printful.com/orders', orderPayload, { headers: printfulHeaders() });
@@ -794,7 +794,7 @@ app.post('/webhook-order', async (req, res) => {
       return {
         id: pfItem.id,
         files: [{
-          type: 'front',
+          type: printfulFileType(design.variantId),
           url:  design.designUrl,
           position: {
             area_width:  1800,
@@ -910,6 +910,21 @@ function shopifyToPrintfulVariant(shopifyVariantId) {
     "67589727125801": 5560842242   // 2XL
   };
   return map[id] || null;
+}
+
+// Returns the Printful file placement type for a Shopify variant.
+// Default 'front' covers all DTG products (white tees, Softstyle black, etc).
+// DTF products (Unisex DryBlend black) require 'front_dtf' — Printful rejects
+// 'front' for them (seen on test order #1024, Oct 7).
+function printfulFileType(shopifyVariantId) {
+  const DTF_VARIANTS = new Set([
+    "67584059212073",  // DryBlend black S
+    "67584059244841",  // DryBlend black M
+    "67584059277609",  // DryBlend black L
+    "67584059310377",  // DryBlend black XL
+    "67584059343145",  // DryBlend black 2XL
+  ]);
+  return DTF_VARIANTS.has(String(shopifyVariantId)) ? 'front_dtf' : 'front';
 }
 
 app.listen(PORT, () => {
